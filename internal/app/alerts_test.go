@@ -26,7 +26,12 @@ const disturbanceIntro = "Възможни смущения в електроз�
 // watcher starts the system and has a verified Subscriber watching ул. Дойран 11; the Provider answers 404 until a feed is served.
 func watcher(t *testing.T, lang string) (*testkit.System, *atomic.Bool) {
 	t.Helper()
-	s := testkit.Start(t, "all", nil)
+	return watcherAt(t, lang, time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC))
+}
+
+func watcherAt(t *testing.T, lang string, now time.Time) (*testkit.System, *atomic.Bool) {
+	t.Helper()
+	s := testkit.StartAt(t, "all", nil, now)
 	importVarna(t, s)
 	signup(t, s, "ivan@example.com", lang, addr{streets(t, s, "10135", "doyran")[0].ID, "11"})
 	if c := verify(t, s, token(t, waitMail(t, s, 1)[0])); c != 204 {

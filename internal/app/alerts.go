@@ -39,19 +39,20 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 	now := s.clk.Now()
 	type outage struct {
 		ordinal    int
+		kind       string
 		severity   string
 		start, end time.Time
 		settlement string
 		places     []string
 	}
 	var outages []outage
-	rows, err := s.pool.Query(ctx, `SELECT severity, start_at, end_at, settlement, places FROM outages WHERE notice_id = $1 ORDER BY id`, noticeID)
+	rows, err := s.pool.Query(ctx, `SELECT kind, severity, start_at, end_at, settlement, places FROM outages WHERE notice_id = $1 ORDER BY id`, noticeID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		o := outage{ordinal: len(outages)}
-		if err := rows.Scan(&o.severity, &o.start, &o.end, &o.settlement, &o.places); err != nil {
+		if err := rows.Scan(&o.kind, &o.severity, &o.start, &o.end, &o.settlement, &o.places); err != nil {
 			rows.Close()
 			return err
 		}
@@ -110,7 +111,7 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 				continue
 			}
 			sum := sha256.Sum256([]byte(fmt.Sprint(noticeID, o.ordinal, w.id, m, o.start.Unix(), o.end.Unix())))
-			if err := s.createAlert(ctx, hex.EncodeToString(sum[:]), w.sub, w.id, noticeID, o.ordinal, m, o.severity, o.start, o.end); err != nil {
+			if err := s.createAlert(ctx, hex.EncodeToString(sum[:]), w.sub, w.id, noticeID, o.ordinal, m, o.kind, o.severity, o.start, o.end); err != nil {
 				return err
 			}
 		}
@@ -118,7 +119,7 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 	return nil
 }
 
-func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, notice int64, ordinal int, match, severity string, start, end time.Time) error {
+func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, notice int64, ordinal int, match, kind, severity string, start, end time.Time) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -159,13 +160,33 @@ func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, no
 		channels = append(channels, c)
 	}
 	crows.Close()
+	release := quietUntil(s.clk.Now(), kind, start)
 	for _, c := range channels {
 		p, _ := json.Marshal(sendAlertPayload{id, c})
-		if err := Enqueue(ctx, tx, sendAlertJob, p); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO jobs (kind, payload, run_at) VALUES ($1, $2, $3)`, sendAlertJob, p, release); err != nil {
 			return err
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// quietUntil is when an Alert created at now may be sent: nil (at once) outside Quiet Hours
+// (22:00-08:00 Europe/Sofia), for emergency Outages, and for Outages starting before 09:00 on the release morning.
+// Wall-clock arithmetic in Sofia keeps it right across daylight-saving changes.
+func quietUntil(now time.Time, kind string, start time.Time) *time.Time {
+	n := now.In(sofia)
+	if kind == "emergency" || (n.Hour() >= 8 && n.Hour() < 22) {
+		return nil
+	}
+	day := n.Day()
+	if n.Hour() >= 22 {
+		day++
+	}
+	release := time.Date(n.Year(), n.Month(), day, 8, 0, 0, 0, sofia)
+	if start.Before(time.Date(n.Year(), n.Month(), day, 9, 0, 0, 0, sofia)) {
+		return nil
+	}
+	return &release
 }
 
 // shortcut: wording is inline per language; move to files if a third language or a second channel arrives.

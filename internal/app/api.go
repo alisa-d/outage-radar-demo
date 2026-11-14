@@ -149,6 +149,7 @@ func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte
 		return nil, err
 	}
 	defer rows.Close()
+	resolvers := map[string]*resolver{}
 	byDay := map[string]map[string][]outageJSON{}
 	for rows.Next() {
 		var o outageJSON
@@ -157,10 +158,18 @@ func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte
 		if err := rows.Scan(&o.ID, &o.Provider, &o.Utility, &o.Kind, &o.Severity, &start, &end, &o.EndApproximate, &settlement, &o.Places, &o.Notice); err != nil {
 			return nil, err
 		}
-		start, end = start.In(sofia), end.In(sofia)
-		if o.Area = outageArea(r.Context(), pool, settlement, o.Places); len(o.Area) == 0 {
-			o.Unlocated = true
+		rs, ok := resolvers[settlement]
+		if !ok {
+			if rs, err = loadResolver(r.Context(), pool, settlement); err != nil {
+				return nil, err
+			}
+			resolvers[settlement] = rs
 		}
+		if _, o.Unlocated, err = matchOutage(rs, settlement, o.Places, nil); err != nil {
+			return nil, err
+		}
+		start, end = start.In(sofia), end.In(sofia)
+		o.Area = outageArea(r.Context(), pool, settlement, o.Places)
 		o.Start, o.End = start.Format(time.RFC3339), end.Format(time.RFC3339)
 		if en {
 			settlement = latin(settlement)

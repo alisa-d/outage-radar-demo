@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -85,6 +86,7 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 		return err
 	}
 
+	resolvers := map[string]*resolver{}
 	for _, w := range watches {
 		plain, err := unseal(s.kp, w.enc)
 		if err != nil {
@@ -101,11 +103,30 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 			}
 			return err
 		}
+		rs, ok := resolvers[settlement]
+		if !ok {
+			if rs, err = loadResolver(ctx, s.pool, settlement); err != nil {
+				return err
+			}
+			resolvers[settlement] = rs
+		}
+		b, err := lookupNumber(ctx, s.pool, strconv.Itoa(a.StreetID), a.Number)
+		if err != nil {
+			if errors.Is(err, errNotFound) {
+				continue
+			}
+			return err
+		}
+		at := &target{street: street, number: a.Number, pt: [2]float64{b.Lon, b.Lat}}
 		for _, o := range outages {
 			if !o.end.After(now) {
 				continue
 			}
-			m := matchOutage(o.settlement, o.places, settlement, street, a.Number)
+			// An Unlocated Outage is Not affected here: it creates no Alerts (ADR 0003).
+			m, _, err := matchOutage(rs, o.settlement, o.places, at)
+			if err != nil {
+				return err
+			}
 			if m == notAffected {
 				continue
 			}

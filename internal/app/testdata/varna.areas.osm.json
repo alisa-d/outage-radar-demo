@@ -1,0 +1,232 @@
+{
+ "elements": [
+  {
+   "type": "way",
+   "id": 101,
+   "tags": {
+    "name": "бул. Васил Левски",
+    "highway": "primary"
+   },
+   "geometry": [
+    {
+     "lat": 43.21,
+     "lon": 27.9
+    },
+    {
+     "lat": 43.21,
+     "lon": 27.92
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 102,
+   "tags": {
+    "name": "улица Беласица",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.205,
+     "lon": 27.905
+    },
+    {
+     "lat": 43.215,
+     "lon": 27.905
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 103,
+   "tags": {
+    "name": "улица Тодор Влайков",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.205,
+     "lon": 27.91
+    },
+    {
+     "lat": 43.215,
+     "lon": 27.91
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 104,
+   "tags": {
+    "name": "бул. Сливница",
+    "highway": "primary"
+   },
+   "geometry": [
+    {
+     "lat": 43.206,
+     "lon": 27.9
+    },
+    {
+     "lat": 43.206,
+     "lon": 27.92
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 105,
+   "tags": {
+    "name": "улица Аспарухов вал",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.195,
+     "lon": 27.885
+    },
+    {
+     "lat": 43.199,
+     "lon": 27.89
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 106,
+   "tags": {
+    "name": "улица Гара",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.194,
+     "lon": 27.906
+    },
+    {
+     "lat": 43.196,
+     "lon": 27.907
+    }
+   ]
+  },
+  {
+   "type": "way",
+   "id": 107,
+   "tags": {
+    "name": "улица Морска",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.1975,
+     "lon": 27.942
+    },
+    {
+     "lat": 43.199,
+     "lon": 27.943
+    }
+   ]
+  },
+  {
+   "type": "node",
+   "id": 201,
+   "lat": 43.208,
+   "lon": 27.9053,
+   "tags": {
+    "addr:street": "улица Беласица",
+    "addr:housenumber": "7"
+   }
+  },
+  {
+   "type": "node",
+   "id": 202,
+   "lat": 43.2102,
+   "lon": 27.915,
+   "tags": {
+    "addr:street": "бул. Васил Левски",
+    "addr:housenumber": "120"
+   }
+  },
+  {
+   "type": "node",
+   "id": 203,
+   "lat": 43.197,
+   "lon": 27.887,
+   "tags": {
+    "addr:street": "улица Аспарухов вал",
+    "addr:housenumber": "1"
+   }
+  },
+  {
+   "type": "node",
+   "id": 204,
+   "lat": 43.1951,
+   "lon": 27.9065,
+   "tags": {
+    "addr:street": "улица Гара",
+    "addr:housenumber": "1"
+   }
+  },
+  {
+   "type": "node",
+   "id": 205,
+   "lat": 43.1982,
+   "lon": 27.9425,
+   "tags": {
+    "addr:street": "улица Морска",
+    "addr:housenumber": "2"
+   }
+  },
+  {
+   "type": "way",
+   "id": 301,
+   "tags": {
+    "name": "Аспарухово",
+    "place": "suburb"
+   },
+   "geometry": [
+    {
+     "lat": 43.19,
+     "lon": 27.88
+    },
+    {
+     "lat": 43.19,
+     "lon": 27.895
+    },
+    {
+     "lat": 43.205,
+     "lon": 27.895
+    },
+    {
+     "lat": 43.205,
+     "lon": 27.88
+    },
+    {
+     "lat": 43.19,
+     "lon": 27.88
+    }
+   ]
+  },
+  {
+   "type": "node",
+   "id": 302,
+   "lat": 43.195,
+   "lon": 27.906,
+   "tags": {
+    "name": "ЖП гара",
+    "railway": "station"
+   }
+  },
+  {
+   "type": "way",
+   "id": 303,
+   "center": {
+    "lat": 43.198,
+    "lon": 27.942
+   },
+   "tags": {
+    "name": "Фестивален и Конгресен център",
+    "amenity": "conference_centre"
+   }
+  }
+ ]
+}

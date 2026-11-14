@@ -15,6 +15,7 @@ services:
       ROLE: all
       DATA_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # dev only, never reuse
       SMTP_ADDR: mailpit:1025
+      TURNSTILE_SECRET: 1x0000000000000000000000000000000AA # Cloudflare test secret (always passes); real one by env in prod
       OIDC_ISSUER: http://keycloak:8080/realms/outage
     depends_on: { postgres: { condition: service_healthy } }
 

@@ -5,8 +5,8 @@
   let confirmed = $state(null);
 
   const t = {
-    bg: { title: 'Аварии във вашия район', pick: 'Изберете област', loading: 'Зареждане…', error: 'Грешка при зареждане', settlements: 'Населени места', providers: 'Доставчици', water: 'вода', power: 'ток', cut: 'Прекъсване', disturbance: 'Възможни смущения', planned: 'планирано', emergency: 'аварийно', approx: '~', original: 'Оригинално съобщение', none: 'Няма планирани прекъсвания за следващите 7 дни.', whole: 'цялото населено място', since: 'от', healthy: 'данните са актуални', stale: 'данните от {p} не са налични', suspicious: 'данните от {p} може да са непълни', unknown: 'все още няма данни от {p}', cov: { 'planned outages only': 'само планирани прекъсвания', 'planned and emergency outages': 'планирани и аварийни прекъсвания' }, checkTitle: 'Резултат за адреса', affected: 'Засегнат', possibly_affected: 'Възможно засегнат', not_affected: 'Не е засегнат', no_data: 'Няма данни', noDataWhy: 'Данните от {p} не са актуални, затова не можем да кажем дали има авария.', notAffectedNote: 'Обхват: {c}. Липсата на съобщение извън обхвата не означава, че няма авария.', alerts: 'Получавайте известия' },
-    en: { title: 'Outages in your area', pick: 'Choose a region', loading: 'Loading…', error: 'Could not load regions', settlements: 'Settlements', providers: 'Providers', water: 'water', power: 'power', cut: 'Cut', disturbance: 'Possible disturbances', planned: 'planned', emergency: 'emergency', approx: '~', original: 'Original notice (Bulgarian)', none: 'No planned outages in the next 7 days.', whole: 'whole settlement', since: 'since', healthy: 'data is up to date', stale: 'data from {p} unavailable', suspicious: 'data from {p} may be incomplete', unknown: 'no data from {p} yet', cov: { 'planned outages only': 'planned outages only', 'planned and emergency outages': 'planned and emergency outages' }, checkTitle: 'Result for this address', affected: 'Affected', possibly_affected: 'Possibly affected', not_affected: 'Not affected', no_data: 'No data', noDataWhy: 'Data from {p} is not current, so we cannot say whether there is an outage.', notAffectedNote: 'Coverage: {c}. No notice outside this coverage does not mean there is no outage.', alerts: 'Get alerts' }
+    bg: { title: 'Аварии във вашия район', pick: 'Изберете област', loading: 'Зареждане…', error: 'Грешка при зареждане', settlements: 'Населени места', providers: 'Доставчици', water: 'вода', power: 'ток', cut: 'Прекъсване', disturbance: 'Възможни смущения', planned: 'планирано', emergency: 'аварийно', approx: '~', original: 'Оригинално съобщение', none: 'Няма планирани прекъсвания за следващите 7 дни.', whole: 'цялото населено място', since: 'от', healthy: 'данните са актуални', stale: 'данните от {p} не са налични', suspicious: 'данните от {p} може да са непълни', unknown: 'все още няма данни от {p}', cov: { 'planned outages only': 'само планирани прекъсвания', 'planned and emergency outages': 'планирани и аварийни прекъсвания' }, checkTitle: 'Резултат за адреса', affected: 'Засегнат', possibly_affected: 'Възможно засегнат', not_affected: 'Не е засегнат', no_data: 'Няма данни', noDataWhy: 'Данните от {p} не са актуални, затова не можем да кажем дали има авария.', notAffectedNote: 'Обхват: {c}. Липсата на съобщение извън обхвата не означава, че няма авария.', alerts: 'Получавайте известия', unlocated: 'Не можем да определим кои адреса са засегнати. Прочетете оригиналното съобщение.' },
+    en: { title: 'Outages in your area', pick: 'Choose a region', loading: 'Loading…', error: 'Could not load regions', settlements: 'Settlements', providers: 'Providers', water: 'water', power: 'power', cut: 'Cut', disturbance: 'Possible disturbances', planned: 'planned', emergency: 'emergency', approx: '~', original: 'Original notice (Bulgarian)', none: 'No planned outages in the next 7 days.', whole: 'whole settlement', since: 'since', healthy: 'data is up to date', stale: 'data from {p} unavailable', suspicious: 'data from {p} may be incomplete', unknown: 'no data from {p} yet', cov: { 'planned outages only': 'planned outages only', 'planned and emergency outages': 'planned and emergency outages' }, checkTitle: 'Result for this address', affected: 'Affected', possibly_affected: 'Possibly affected', not_affected: 'Not affected', no_data: 'No data', noDataWhy: 'Data from {p} is not current, so we cannot say whether there is an outage.', notAffectedNote: 'Coverage: {c}. No notice outside this coverage does not mean there is no outage.', alerts: 'Get alerts', unlocated: 'We could not work out which addresses are affected. Please read the original notice.' }
   };
   let lang = $state('bg');
   let regions = $state(null);
@@ -95,6 +95,12 @@
                   <details><summary>{L.original}</summary><pre lang="bg">{o.notice}</pre></details>
                 </div>
               {/each}
+              {#each u.unlocated as o}
+                <div class="unlocated">
+                  <strong>{o.start.slice(0, 10)} {when(o)}</strong>, {L[o.severity]}, {L[o.kind]}: {L.unlocated}
+                  <details><summary>{L.original}</summary><pre lang="bg">{o.notice}</pre></details>
+                </div>
+              {/each}
             </div>
           {/each}
           <a href={`/subscribe?street_id=${confirmed.streetId}&number=${encodeURIComponent(confirmed.number)}`}>{L.alerts}</a>
@@ -118,7 +124,7 @@
             {#each s.outages as o}
               <li id={`outage-${o.id}`} class={o.severity}>
                 <strong>{when(o)}</strong> {L[o.utility]}, {L[o.severity]}, {L[o.kind]}
-                <div>{o.places.length ? o.places.join('; ') : L.whole}</div>
+                <div>{o.unlocated ? L.unlocated : o.places.length ? o.places.join('; ') : L.whole}</div>
                 <details><summary>{L.original}</summary><pre lang="bg">{o.notice}</pre></details>
               </li>
             {/each}

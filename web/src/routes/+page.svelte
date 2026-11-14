@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import AddressPicker from '$lib/AddressPicker.svelte';
+  import RegionMap from '$lib/RegionMap.svelte';
   let confirmed = $state(null);
 
   const t = {
@@ -107,6 +108,7 @@
       <ul class="coverage" data-testid="coverage">
         {#each region.providers as p}<li>{L[p.utility]}: {L.cov[p.coverage] ?? p.coverage}</li>{/each}
       </ul>
+      {#if days}<RegionMap {days} {lang} />{/if}
       {#if days && days.length === 0}<p>{L.none}</p>{/if}
       {#each days ?? [] as day}
         <h2>{day.date}</h2>
@@ -114,7 +116,7 @@
           <h3>{s.name}</h3>
           <ul class="outages">
             {#each s.outages as o}
-              <li class={o.severity}>
+              <li id={`outage-${o.id}`} class={o.severity}>
                 <strong>{when(o)}</strong> {L[o.utility]}, {L[o.severity]}, {L[o.kind]}
                 <div>{o.places.length ? o.places.join('; ') : L.whole}</div>
                 <details><summary>{L.original}</summary><pre lang="bg">{o.notice}</pre></details>
@@ -129,7 +131,7 @@
 
 <style>
   :global(body) { margin: 0; font-family: system-ui, sans-serif; }
-  main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+  main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
   nav { text-align: right; }
   nav button.on { font-weight: bold; }
   .outages { list-style: none; padding: 0; }

@@ -78,6 +78,15 @@ type System struct {
 // Start migrates a fresh database and runs the app against it.
 func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	t.Helper()
+	return StartWith(t, role, handlers, nil)
+}
+
+// ValidTurnstileToken is the only token the stub Turnstile accepts.
+const ValidTurnstileToken = "valid-token"
+
+// StartWith is Start with a hook to adjust the Config (limits are generous by default).
+func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak func(*app.Config)) *System {
+	t.Helper()
 	dsn := NewDatabase(t)
 	var s *System
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,8 +103,19 @@ func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	}
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
-	a, err := app.Start(ctx, app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
-		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL}, s.Clock, handlers)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		fmt.Fprintf(w, `{"success":%t}`, r.Form.Get("secret") == "test-secret" && r.Form.Get("response") == ValidTurnstileToken)
+	}))
+	t.Cleanup(ts.Close)
+	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
+		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL,
+		TurnstileSecret: "test-secret", TurnstileURL: ts.URL,
+		IPLimit: 1000, ChannelLimit: 1000, AddressLimit: 1000, ChannelDailyCap: 1000, EmailDailyBudget: 1000}
+	if tweak != nil {
+		tweak(&cfg)
+	}
+	a, err := app.Start(ctx, cfg, s.Clock, handlers)
 	if err != nil {
 		t.Fatalf("start app: %v", err)
 	}

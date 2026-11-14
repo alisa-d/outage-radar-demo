@@ -10,6 +10,7 @@ import (
 	"github.com/alisa/outage-radar/internal/ingest"
 
 	"github.com/alisa/outage-radar/internal/clock"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -133,16 +134,30 @@ type dayJSON struct {
 	Settlements []settlementJSON `json:"settlements"`
 }
 
+// outageSelect is the shared outage query head; callers append WHERE and ORDER BY.
+const outageSelect = `SELECT o.id, p.name, p.utility, o.kind, o.severity, o.start_at, o.end_at, o.end_approximate, o.settlement, o.places, n.text
+	FROM outages o JOIN notices n ON n.id = o.notice_id JOIN providers p ON p.id = o.provider_id `
+
+// scanOutage reads one outageSelect row; the caller formats the times and places.
+func scanOutage(rows pgx.Rows) (o outageJSON, start, end time.Time, settlement string, err error) {
+	err = rows.Scan(&o.ID, &o.Provider, &o.Utility, &o.Kind, &o.Severity, &start, &end, &o.EndApproximate, &settlement, &o.Places, &o.Notice)
+	return
+}
+
+// outageWindow is the 8 Sofia days starting at today's midnight: today through today+7.
+func outageWindow(now time.Time) (from, to time.Time) {
+	n := now.In(sofia)
+	from = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, sofia)
+	return from, from.AddDate(0, 0, 8)
+}
+
 // regionOutages lists Outages starting today through today+7 (Europe/Sofia), by day and Settlement.
 func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte, error) {
 	en := r.URL.Query().Get("lang") == "en"
-	now := clk.Now().In(sofia)
-	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sofia)
-	rows, err := pool.Query(r.Context(), `
-		SELECT o.id, p.name, p.utility, o.kind, o.severity, o.start_at, o.end_at, o.end_approximate, o.settlement, o.places, n.text
-		FROM outages o JOIN notices n ON n.id = o.notice_id JOIN providers p ON p.id = o.provider_id
+	from, to := outageWindow(clk.Now())
+	rows, err := pool.Query(r.Context(), outageSelect+`
 		WHERE p.region_id::text = $1 AND o.start_at >= $2 AND o.start_at < $3
-		ORDER BY o.start_at, o.end_at, o.id`, r.PathValue("id"), from, from.AddDate(0, 0, 8))
+		ORDER BY o.start_at, o.end_at, o.id`, r.PathValue("id"), from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -150,10 +165,8 @@ func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte
 	resolvers := map[string]*resolver{}
 	byDay := map[string]map[string][]outageJSON{}
 	for rows.Next() {
-		var o outageJSON
-		var start, end time.Time
-		var settlement string
-		if err := rows.Scan(&o.ID, &o.Provider, &o.Utility, &o.Kind, &o.Severity, &start, &end, &o.EndApproximate, &settlement, &o.Places, &o.Notice); err != nil {
+		o, start, end, settlement, err := scanOutage(rows)
+		if err != nil {
 			return nil, err
 		}
 		rs, ok := resolvers[settlement]

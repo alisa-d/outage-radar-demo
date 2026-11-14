@@ -1,0 +1,13 @@
+{"elements":[
+ {"type":"node","id":1,"lat":43.2141,"lon":27.9147,"tags":{"place":"city","name":"Варна","ref:ekatte":"10135"}},
+ {"type":"node","id":2,"lat":43.3,"lon":27.8,"tags":{"place":"town","name":"Девня","ref:ekatte":"20482"}},
+ {"type":"way","id":100,"tags":{"highway":"residential","name":"улица Фердинанд"},
+  "geometry":[{"lat":43.2,"lon":27.9},{"lat":43.2,"lon":27.91}]},
+ {"type":"way","id":101,"tags":{"highway":"primary","name":"бул. Владислав Варненчик"},
+  "geometry":[{"lat":43.21,"lon":27.9},{"lat":43.21,"lon":27.92}]},
+ {"type":"node","id":200,"lat":43.20008,"lon":27.9,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"1"}},
+ {"type":"node","id":201,"lat":43.20008,"lon":27.904,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"5"}},
+ {"type":"node","id":202,"lat":43.20008,"lon":27.908,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"9"}},
+ {"type":"node","id":203,"lat":43.19992,"lon":27.9,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"2"}},
+ {"type":"node","id":204,"lat":43.19992,"lon":27.908,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"8"}}
+]}

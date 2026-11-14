@@ -28,6 +28,9 @@ type utilityResult struct {
 	Coverage string        `json:"coverage"`
 	Result   string        `json:"result"`
 	Outages  []checkOutage `json:"outages"`
+	// Unlocated and Health: known Outages stay listed when the Provider is not healthy.
+	Unlocated []checkOutage `json:"unlocated"`
+	Health    string        `json:"provider_health"`
 }
 
 type checkResponse struct {
@@ -194,8 +197,12 @@ func TestStaleOrSuspiciousProviderYieldsNoDataNeverNoOutage(t *testing.T) {
 	down.Store(true)
 	s.Clock.Advance(46 * time.Minute) // past 3 x 15 min
 	waitFor(t, func() bool { return check(t, s, "bregalnitsa", "5", "bg")["power"].Result == "no_data" })
-	if r := check(t, s, "bregalnitsa", "3", "bg")["power"]; r.Result != "no_data" {
+	// Known Outages stay valid (story 43): only the claim of completeness is withdrawn.
+	if r := check(t, s, "bregalnitsa", "3", "bg")["power"]; r.Result != "affected" || len(r.Outages) != 2 || r.Health != "stale" {
 		t.Errorf("stale, listed number: %+v", r)
+	}
+	if r := check(t, s, "bregalnitsa", "5", "bg")["power"]; r.Result != "no_data" || len(r.Outages) != 0 || r.Health != "stale" {
+		t.Errorf("stale, unlisted number: %+v", r)
 	}
 
 	down.Store(false)
@@ -261,5 +268,19 @@ func TestCheckStoresNothing(t *testing.T) {
 	}
 	if after := snapshot(); after != before {
 		t.Errorf("database changed by anonymous checks:\n%s\n%s", before, after)
+	}
+}
+
+func TestUnlocatedOutagesAreListedEvenWhenTheProviderIsStale(t *testing.T) {
+	s := testkit.Start(t, "all", nil)
+	var down atomic.Bool
+	serveFeed(s, &down, feed(row(1, intro+"клиентите, електрозахранени от ТП 314.")))
+	importVarna(t, s)
+	ingested(t, s)
+	down.Store(true)
+	s.Clock.Advance(46 * time.Minute)
+	waitFor(t, func() bool { return check(t, s, "doyran", "11", "bg")["power"].Result == "no_data" })
+	if r := check(t, s, "doyran", "11", "bg")["power"]; len(r.Unlocated) != 1 || r.Result != "no_data" {
+		t.Errorf("stale unlocated: %+v", r)
 	}
 }

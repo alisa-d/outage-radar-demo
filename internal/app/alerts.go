@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"mime"
-	"mime/quotedprintable"
 	"net/http"
 	"strconv"
 	"strings"
@@ -258,14 +255,26 @@ func (s *subscriptions) sendAlert(ctx context.Context, payload []byte) error {
 	var lang, match, severity, noticeText, utility, street string
 	var start, end time.Time
 	var waEnc, chEnc []byte
-	err := s.pool.QueryRow(ctx, `SELECT sub.language, a.match_result, a.severity, a.start_at, a.end_at, n.text, pr.utility, wa.data_enc, c.value_enc
+	var noticeID int64
+	var ordinal int
+	err := s.pool.QueryRow(ctx, `SELECT a.notice_id, a.ordinal, sub.language, a.match_result, a.severity, a.start_at, a.end_at, n.text, pr.utility, wa.data_enc, c.value_enc
 		FROM alerts a JOIN subscribers sub ON sub.id = a.subscriber_id JOIN notices n ON n.id = a.notice_id JOIN providers pr ON pr.id = n.provider_id
 		JOIN watched_addresses wa ON wa.id = a.watched_address_id
 		JOIN contact_channels c ON c.id = $2 AND c.subscriber_id = a.subscriber_id AND c.verified_at IS NOT NULL AND c.disabled_at IS NULL
-		WHERE a.id = $1`, p.Alert, p.Channel).Scan(&lang, &match, &severity, &start, &end, &noticeText, &utility, &waEnc, &chEnc)
+		WHERE a.id = $1`, p.Alert, p.Channel).Scan(&noticeID, &ordinal, &lang, &match, &severity, &start, &end, &noticeText, &utility, &waEnc, &chEnc)
 	if err == pgx.ErrNoRows {
 		return nil // erased, unsubscribed or never verified: nothing to send
 	} else if err != nil {
+		return err
+	}
+	// An Alert held for Quiet Hours must not go out for an Outage that has since ended or been cancelled.
+	var live bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM (SELECT end_at FROM outages WHERE notice_id = $1 ORDER BY id OFFSET $2 LIMIT 1) o WHERE o.end_at > $3)`,
+		noticeID, ordinal, s.clk.Now()).Scan(&live); err != nil {
+		return err
+	}
+	if !live {
+		_, err := s.pool.Exec(ctx, `INSERT INTO delivery_attempts (alert_id, channel_id, at, outcome) VALUES ($1, $2, $3, 'skipped')`, p.Alert, p.Channel, s.clk.Now())
 		return err
 	}
 	wplain, err := unseal(s.kp, waEnc)
@@ -291,14 +300,10 @@ func (s *subscriptions) sendAlert(ctx context.Context, payload []byte) error {
 	head := fmt.Sprintf(t.headline[severity+"/"+match], t.utility[utility])
 	loc := sofia
 	window := start.In(loc).Format("2006-01-02 15:04") + " - " + end.In(loc).Format("2006-01-02 15:04")
-	unsubAPI := strings.TrimRight(s.cfg.PublicURL, "/") + "/api/unsubscribe?token=" + s.unsubToken(p.Channel)
-	unsubPage := strings.TrimRight(s.cfg.PublicURL, "/") + "/unsubscribe?token=" + s.unsubToken(p.Channel)
-	var body bytes.Buffer
-	qp := quotedprintable.NewWriter(&body)
-	fmt.Fprintf(qp, "%s\r\n\r\n%s: %s\r\n%s: %s\r\n\r\n%s:\r\n%s\r\n\r\n-- \r\n%s: %s\r\n", head, t.addressWord, addr, t.windowWord, window, t.noticeWord, plainNotice(noticeText), t.unsub, unsubPage)
-	qp.Close()
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nList-Unsubscribe: <%s>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
-		s.cfg.MailFrom, to, mime.QEncoding.Encode("utf-8", head), s.clk.Now().Format(time.RFC1123Z), unsubAPI, body.String())
+	unsubAPI := s.baseURL() + "/api/unsubscribe?token=" + s.unsubToken(p.Channel)
+	unsubPage := s.baseURL() + "/unsubscribe?token=" + s.unsubToken(p.Channel)
+	body := fmt.Sprintf("%s\r\n\r\n%s: %s\r\n%s: %s\r\n\r\n%s:\r\n%s\r\n\r\n-- \r\n%s: %s\r\n", head, t.addressWord, addr, t.windowWord, window, t.noticeWord, plainNotice(noticeText), t.unsub, unsubPage)
+	msg := s.composeMail(string(to), head, []string{"List-Unsubscribe: <" + unsubAPI + ">", "List-Unsubscribe-Post: List-Unsubscribe=One-Click"}, body)
 
 	sendErr := s.sendMail(string(to), msg)
 	outcome := "sent"
@@ -341,7 +346,8 @@ func plainNotice(t string) string {
 	return strings.ReplaceAll(strings.TrimSpace(b.String()), "\n", "\r\n")
 }
 
-// unsubscribe is the RFC 8058 one-click endpoint: a POST disables the Contact Channel at once.
+// unsubscribe is the RFC 8058 one-click endpoint: a POST removes the Contact Channel at once
+// (and the Subscriber with it when it was the last one), exactly like removal in management.
 func (s *subscriptions) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	tok := r.URL.Query().Get("token")
 	id, _, ok := strings.Cut(tok, ".")
@@ -350,7 +356,12 @@ func (s *subscriptions) unsubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid link", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.pool.Exec(r.Context(), `UPDATE contact_channels SET disabled_at = $2 WHERE id = $1 AND disabled_at IS NULL`, ch, s.clk.Now()); err != nil {
+	var sub int64
+	err = s.pool.QueryRow(r.Context(), `SELECT subscriber_id FROM contact_channels WHERE id = $1`, ch).Scan(&sub)
+	if err == nil {
+		_, err = s.deleteChannel(r.Context(), ch, sub)
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) { // already gone: unsubscribing again is fine
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

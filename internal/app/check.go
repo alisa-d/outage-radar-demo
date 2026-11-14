@@ -21,11 +21,13 @@ const (
 )
 
 type utilityCheck struct {
-	Utility  string       `json:"utility"`
-	Provider string       `json:"provider"`
-	Coverage string       `json:"coverage"`
-	Result   string       `json:"result"`
-	Outages  []outageJSON `json:"outages"`
+	Utility  string `json:"utility"`
+	Provider string `json:"provider"`
+	Coverage string `json:"coverage"`
+	Result   string `json:"result"`
+	// Health is the Provider's state; Affected with a non-healthy Provider means the list may be incomplete.
+	Health  string       `json:"provider_health"`
+	Outages []outageJSON `json:"outages"`
 	// Unlocated lists the Settlement's Unlocated Outages: shown, never a Match Result (ADR 0003).
 	Unlocated []outageJSON `json:"unlocated"`
 }
@@ -49,25 +51,25 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 			fail(err)
 			return
 		}
-		b, err := lookupNumber(r.Context(), pool, q.Get("street"), q.Get("number"))
+		bldg, err := lookupNumber(r.Context(), pool, q.Get("street"), q.Get("number"))
 		if err != nil {
 			fail(err)
 			return
 		}
-		rs, err := loadResolver(r.Context(), pool, settlement)
+		res, err := loadResolver(r.Context(), pool, settlement)
 		if err != nil {
 			fail(err)
 			return
 		}
-		at := &target{street: street, number: b.Number, pt: [2]float64{b.Lon, b.Lat}}
+		at := &target{street: street, number: bldg.Number, pt: [2]float64{bldg.Lon, bldg.Lat}}
 		now := clk.Now()
-		hs, err := ingest.Healths(r.Context(), pool, now)
+		healths, err := ingest.Healths(r.Context(), pool, now)
 		if err != nil {
 			fail(err)
 			return
 		}
 		en := q.Get("lang") == "en"
-		prows, err := pool.Query(r.Context(), `SELECT id, name, utility, coverage FROM providers WHERE region_id = $1 ORDER BY id`, regionID)
+		providerRows, err := pool.Query(r.Context(), `SELECT id, name, utility, coverage FROM providers WHERE region_id = $1 ORDER BY id`, regionID)
 		if err != nil {
 			fail(err)
 			return
@@ -76,79 +78,76 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 			id                      int
 			name, utility, coverage string
 		}
-		var provs []prov
-		for prows.Next() {
+		var providers []prov
+		for providerRows.Next() {
 			var p prov
-			if err := prows.Scan(&p.id, &p.name, &p.utility, &p.coverage); err != nil {
-				prows.Close()
+			if err := providerRows.Scan(&p.id, &p.name, &p.utility, &p.coverage); err != nil {
+				providerRows.Close()
 				fail(err)
 				return
 			}
-			provs = append(provs, p)
+			providers = append(providers, p)
 		}
-		prows.Close()
+		providerRows.Close()
 
-		sofiaNow := now.In(sofia)
-		to := time.Date(sofiaNow.Year(), sofiaNow.Month(), sofiaNow.Day(), 0, 0, 0, 0, sofia).AddDate(0, 0, 8)
+		_, to := outageWindow(now)
 		out := []utilityCheck{}
-		for _, p := range provs {
-			u := utilityCheck{Utility: p.utility, Provider: p.name, Coverage: p.coverage, Result: noData, Outages: []outageJSON{}, Unlocated: []outageJSON{}}
+		for _, p := range providers {
+			health := healths[p.name].State
+			u := utilityCheck{Utility: p.utility, Provider: p.name, Coverage: p.coverage, Result: noData, Health: health, Outages: []outageJSON{}, Unlocated: []outageJSON{}}
 			// Only a Healthy Provider can say "not affected"; otherwise silence means nothing.
-			if hs[p.name].State == "healthy" {
+			// Outages already known stay valid either way (spec decision 8, story 43).
+			if health == "healthy" {
 				u.Result = notAffected
-				rows, err := pool.Query(r.Context(), `
-					SELECT o.id, o.kind, o.severity, o.start_at, o.end_at, o.end_approximate, o.settlement, o.places, n.text
-					FROM outages o JOIN notices n ON n.id = o.notice_id
-					WHERE o.provider_id = $1 AND o.end_at > $2 AND o.start_at < $3 ORDER BY o.start_at, o.id`, p.id, now, to)
+			}
+			rows, err := pool.Query(r.Context(), outageSelect+`
+				WHERE o.provider_id = $1 AND o.end_at > $2 AND o.start_at < $3 ORDER BY o.start_at, o.id`, p.id, now, to)
+			if err != nil {
+				fail(err)
+				return
+			}
+			for rows.Next() {
+				o, start, end, settlement, err := scanOutage(rows)
 				if err != nil {
+					rows.Close()
 					fail(err)
 					return
 				}
-				for rows.Next() {
-					o := outageJSON{Provider: p.name, Utility: p.utility}
-					var start, end time.Time
-					var os string
-					if err := rows.Scan(&o.ID, &o.Kind, &o.Severity, &start, &end, &o.EndApproximate, &os, &o.Places, &o.Notice); err != nil {
-						rows.Close()
-						fail(err)
-						return
-					}
-					m, unlocated, err := matchOutage(rs, os, o.Places, at)
-					if err != nil {
-						rows.Close()
-						fail(err)
-						return
-					}
-					if m == notAffected && !unlocated {
-						continue
-					}
-					o.Start, o.End = start.In(sofia).Format(time.RFC3339), end.In(sofia).Format(time.RFC3339)
-					if en {
-						for i, pl := range o.Places {
-							o.Places[i] = latin(pl)
-						}
-					}
-					if unlocated {
-						u.Unlocated = append(u.Unlocated, o)
-						continue
-					}
-					u.Outages = append(u.Outages, o)
-					if m == affected || u.Result == notAffected {
-						u.Result = m
-					}
-				}
-				rows.Close()
-				if err := rows.Err(); err != nil {
+				m, unlocated, err := matchOutage(res, settlement, o.Places, at)
+				if err != nil {
+					rows.Close()
 					fail(err)
 					return
 				}
+				if m == notAffected && !unlocated {
+					continue
+				}
+				o.Start, o.End = start.In(sofia).Format(time.RFC3339), end.In(sofia).Format(time.RFC3339)
+				if en {
+					for i, pl := range o.Places {
+						o.Places[i] = latin(pl)
+					}
+				}
+				if unlocated {
+					u.Unlocated = append(u.Unlocated, o)
+					continue
+				}
+				u.Outages = append(u.Outages, o)
+				if m == affected || u.Result == notAffected || u.Result == noData {
+					u.Result = m
+				}
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				fail(err)
+				return
 			}
 			out = append(out, u)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(map[string]any{
-			"address":   map[string]any{"settlement": settlement, "street": street, "number": b.Number, "approximate": b.Approximate},
+			"address":   map[string]any{"settlement": settlement, "street": street, "number": bldg.Number, "approximate": bldg.Approximate},
 			"utilities": out,
 		})
 	}

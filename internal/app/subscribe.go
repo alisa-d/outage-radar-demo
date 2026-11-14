@@ -1,10 +1,8 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,8 +10,6 @@ import (
 	"fmt"
 	"go.opentelemetry.io/otel/metric"
 	"log/slog"
-	"mime"
-	"mime/quotedprintable"
 	"net/http"
 	"net/mail"
 	"net/smtp"
@@ -127,30 +123,31 @@ func (s *subscriptions) create(ctx context.Context, email, lang string, wa [][]b
 	if err != nil {
 		return err
 	}
-	idb := make([]byte, 16)
-	rand.Read(idb)
-	linkID := hex.EncodeToString(idb)
-	tok := linkID + "." + s.sign(linkID)
-	payload, err := json.Marshal(verifyEmailPayload{To: email, Language: lang, Token: tok})
-	if err != nil {
-		return err
-	}
-	jobPayload, err := seal(s.kp, payload) // the queue must not hold the address in clear
-	if err != nil {
-		return err
-	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var known bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contact_channels WHERE blind_idx = $1 AND verified_at IS NOT NULL)`, idx).Scan(&known); err != nil || known {
-		return err
-	}
-	// A repeated unverified signup replaces the earlier one.
-	if _, err := tx.Exec(ctx, `DELETE FROM subscribers WHERE id IN (SELECT subscriber_id FROM contact_channels WHERE blind_idx = $1)`, idx); err != nil {
+	var existing, channel int64
+	var pendingLang string
+	var verified, established bool // established: the Subscriber already has another verified channel
+	switch err := tx.QueryRow(ctx, `SELECT s.id, c.id, s.language, c.verified_at IS NOT NULL,
+		EXISTS (SELECT 1 FROM contact_channels o WHERE o.subscriber_id = s.id AND o.verified_at IS NOT NULL)
+		FROM contact_channels c JOIN subscribers s ON s.id = c.subscriber_id WHERE c.blind_idx = $1`, idx).
+		Scan(&existing, &channel, &pendingLang, &verified, &established); {
+	case err == nil && verified:
+		return nil
+	case err == nil:
+		// Anyone can repeat a pending email, so the pending signup is kept as it is and only the mail is sent again.
+		var forChannel *int64
+		if established { // a channel added through management: verifying it must not record consent again
+			forChannel = &channel
+		}
+		if err := s.newLink(ctx, tx, existing, "verify", forChannel, email, pendingLang); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	case !errors.Is(err, pgx.ErrNoRows):
 		return err
 	}
 	now := s.clk.Now()
@@ -170,10 +167,7 @@ func (s *subscriptions) create(ctx context.Context, email, lang string, wa [][]b
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO magic_links (id, subscriber_id, expires_at) VALUES ($1, $2, $3)`, linkID, sub, now.Add(magicLinkTTL)); err != nil {
-		return err
-	}
-	if err := Enqueue(ctx, tx, verifyEmailJob, jobPayload); err != nil {
+	if err := s.newLink(ctx, tx, sub, "verify", nil, email, lang); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -255,19 +249,23 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 	if err := json.Unmarshal(plain, &p); err != nil {
 		return err
 	}
+	// A bounced or unsubscribed address gets no more mail, including one queued before it was disabled.
+	var disabled bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contact_channels WHERE blind_idx = $1 AND disabled_at IS NOT NULL)`, blindIndex(s.kp, p.To)).Scan(&disabled); err != nil {
+		return err
+	}
+	if disabled {
+		return nil
+	}
 	tpl := verifyMail[p.Language]
-	var body bytes.Buffer
-	qp := quotedprintable.NewWriter(&body)
-	base := strings.TrimRight(s.cfg.PublicURL, "/")
+	var body string
 	if p.Kind == "manage" {
 		tpl = manageMail[p.Language]
-		fmt.Fprintf(qp, tpl.body, base+"/manage?token="+p.Token)
+		body = fmt.Sprintf(tpl.body, s.baseURL()+"/manage?token="+p.Token)
 	} else {
-		fmt.Fprintf(qp, tpl.body, privacyNoticeVersion, base+"/verify?token="+p.Token)
+		body = fmt.Sprintf(tpl.body, privacyNoticeVersion, s.baseURL()+"/verify?token="+p.Token)
 	}
-	qp.Close()
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
-		s.cfg.MailFrom, p.To, mime.QEncoding.Encode("utf-8", tpl.subject), s.clk.Now().Format(time.RFC1123Z), body.String())
+	msg := s.composeMail(p.To, tpl.subject, nil, body)
 	if err := s.sendMail(p.To, msg); err != nil {
 		slog.Warn("verification email failed; will retry")
 		return err

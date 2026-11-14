@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -26,41 +25,11 @@ type httpErr struct {
 
 func (e httpErr) Error() string { return e.msg }
 
-// handleWith is backoffice.handle for endpoints that read the request and the Operator's name; fn returns the audit action.
-func (b *backoffice) handleWith(role string, fn func(context.Context, *http.Request, principal) (action string, out any, err error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		p, err := b.authenticate(r)
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if !p.mfa || !slices.Contains(p.roles, role) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		action, out, err := fn(r.Context(), r, p)
-		var he httpErr
-		if errors.As(err, &he) {
-			http.Error(w, he.msg, he.code)
-			return
-		}
-		if err == nil {
-			_, err = b.pool.Exec(r.Context(), `INSERT INTO audit_log (at, actor, action) VALUES ($1, $2, $3)`, b.clk.Now(), p.name, action)
-		}
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
-	}
-}
-
 func (b *backoffice) reviewRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /backoffice/api/review-queue", b.handleWith(roleOperator, b.reviewQueue))
-	mux.HandleFunc("PATCH /backoffice/api/outages/{notice}/{ordinal}", b.handleWith(roleOperator, b.correctOutage))
-	mux.HandleFunc("GET /backoffice/api/gazetteer", b.handleWith(roleOperator, b.listGazetteer))
-	mux.HandleFunc("POST /backoffice/api/gazetteer", b.handleWith(roleOperator, b.putGazetteer))
+	mux.HandleFunc("GET /backoffice/api/review-queue", b.audited(roleOperator, b.reviewQueue))
+	mux.HandleFunc("PATCH /backoffice/api/outages/{notice}/{ordinal}", b.audited(roleOperator, b.correctOutage))
+	mux.HandleFunc("GET /backoffice/api/gazetteer", b.audited(roleOperator, b.listGazetteer))
+	mux.HandleFunc("POST /backoffice/api/gazetteer", b.audited(roleOperator, b.putGazetteer))
 }
 
 type outageRow struct {

@@ -90,18 +90,12 @@ func (a *Adapter) Fetch(ctx context.Context, c *http.Client) ([]ingest.Notice, e
 	return out, nil
 }
 
-var (
-	br  = regexp.MustCompile(`<br\s*/?>`)
-	tag = regexp.MustCompile(`<[^>]*>`)
-	ws  = regexp.MustCompile(`[ \t\r\f]+`)
-)
-
 // plain turns the Provider's HTML fragment into text, keeping its words.
 func plain(h string) string {
-	lines := strings.Split(tag.ReplaceAllString(br.ReplaceAllString(h, "\n"), ""), "\n")
+	lines := strings.Split(ingest.StripTags(h, ingest.Br), "\n")
 	var out []string
 	for _, l := range lines {
-		if l = strings.TrimSpace(ws.ReplaceAllString(l, " ")); l != "" {
+		if l = strings.TrimSpace(ingest.Spaces.ReplaceAllString(l, " ")); l != "" {
 			out = append(out, l)
 		}
 	}

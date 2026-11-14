@@ -52,9 +52,7 @@ func (*Adapter) Interval() time.Duration { return 15 * time.Minute }
 var (
 	item    = regexp.MustCompile(`(?s)<h2><a href="[^"]*/messages/\w+/(\d+)\.html[^"]*">.*?list-item-date">\s*(\d\d\.\d\d\.\d{4})[^<]*</div>\s*<div class="list-item-text">(.*?)<a `)
 	view    = regexp.MustCompile(`(?s)<div class="view">(.*?)<div class="clear">`)
-	tag     = regexp.MustCompile(`<[^>]*>`)
-	br      = regexp.MustCompile(`</p>|<br\s*/?>`)
-	spaces  = regexp.MustCompile(`[ \t\r\f]+`)
+	br      = regexp.MustCompile(`</p>|` + ingest.Br.String())
 	newline = regexp.MustCompile(`\s*\n\s*`)
 )
 
@@ -97,7 +95,7 @@ func (a *Adapter) Fetch(ctx context.Context, c *http.Client) ([]ingest.Notice, e
 				if pub.Before(cutoff) {
 					break pages // only as far as needed
 				}
-				id, snippet := m[1], strings.TrimSpace(tag.ReplaceAllString(m[3], ""))
+				id, snippet := m[1], strings.TrimSpace(ingest.Tag.ReplaceAllString(m[3], ""))
 				key := l.typ + id + "|" + snippet
 				text, ok := a.details[key]
 				if !ok {
@@ -122,8 +120,8 @@ func (a *Adapter) Fetch(ctx context.Context, c *http.Client) ([]ingest.Notice, e
 }
 
 func plain(h string) string {
-	s := html.UnescapeString(tag.ReplaceAllString(br.ReplaceAllString(h, "\n"), ""))
-	s = newline.ReplaceAllString(spaces.ReplaceAllString(strings.ReplaceAll(s, " ", " "), " "), "\n")
+	s := html.UnescapeString(ingest.StripTags(h, br))
+	s = newline.ReplaceAllString(ingest.Spaces.ReplaceAllString(strings.ReplaceAll(s, " ", " "), " "), "\n")
 	return strings.TrimSpace(s)
 }
 

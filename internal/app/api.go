@@ -7,6 +7,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/alisa/outage-radar/internal/ingest"
+
 	"github.com/alisa/outage-radar/internal/clock"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -18,11 +20,12 @@ SELECT coalesce(json_agg(json_build_object(
   'providers',   (SELECT coalesce(json_agg(json_build_object('name', p.name, 'utility', p.utility, 'coverage', p.coverage) ORDER BY p.id), '[]') FROM providers p WHERE p.region_id = r.id)
 ) ORDER BY r.id), '[]') FROM regions r`
 
-func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock) http.Handler {
+func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics http.Handler) http.Handler {
 	mux := http.NewServeMux()
+	// shortcut: served on the public listener (the frontend proxy only forwards /api); only roles with HTTP export metrics.
 	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
 	mux.HandleFunc("POST /api/verify", subs.verify)
-	mux.HandleFunc("GET /metrics", subs.metrics)
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); metrics.ServeHTTP(w, r) })
 	subs.routes(mux)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte
@@ -30,8 +33,26 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock) http.Handl
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		// Provider Health is derived from the clock, so it is added here rather than in SQL.
+		hs, err := ingest.Healths(r.Context(), pool, clk.Now())
+		var regions []map[string]any
+		if err != nil || json.Unmarshal(body, &regions) != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		for _, reg := range regions {
+			for _, p := range reg["providers"].([]any) {
+				p := p.(map[string]any)
+				h := hs[p["name"].(string)]
+				health := map[string]any{"state": h.State, "last_success": nil}
+				if h.LastSuccess != nil {
+					health["last_success"] = h.LastSuccess.In(sofia).Format(time.RFC3339)
+				}
+				p["health"] = health
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		json.NewEncoder(w).Encode(regions)
 	})
 	mux.HandleFunc("GET /api/settlements/{ekatte}/streets", func(w http.ResponseWriter, r *http.Request) {
 		q := normalize(r.URL.Query().Get("q"))

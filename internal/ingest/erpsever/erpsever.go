@@ -57,8 +57,11 @@ func (a *Adapter) Fetch(ctx context.Context, c *http.Client) ([]ingest.Notice, e
 		var areas []map[string]json.RawMessage
 		err = json.NewDecoder(resp.Body).Decode(&areas)
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK || err != nil {
-			return nil, fmt.Errorf("%s: status %d, decode: %v", typ, resp.StatusCode, err)
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("%s: status %d", typ, resp.StatusCode)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w: %v", typ, ingest.ErrFormat, err)
 		}
 		for _, area := range areas {
 			var id string

@@ -1,0 +1,43 @@
+{
+ "elements": [
+  {
+   "type": "node",
+   "id": 1,
+   "lat": 43.25,
+   "lon": 27.7,
+   "tags": {
+    "place": "village",
+    "name": "Каменар",
+    "ref:ekatte": "99001"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1,
+   "tags": {
+    "name": "улица Първа",
+    "highway": "residential"
+   },
+   "geometry": [
+    {
+     "lat": 43.25,
+     "lon": 27.7
+    },
+    {
+     "lat": 43.25,
+     "lon": 27.701
+    }
+   ]
+  },
+  {
+   "type": "node",
+   "id": 2,
+   "lat": 43.2501,
+   "lon": 27.7005,
+   "tags": {
+    "addr:street": "улица Първа",
+    "addr:housenumber": "3"
+   }
+  }
+ ]
+}

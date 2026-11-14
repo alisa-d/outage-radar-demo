@@ -1,0 +1,22 @@
+{
+ "provider": "ВиК Варна",
+ "notice": {
+  "external_id": "breakdown/17822",
+  "published": "2026-11-11T00:00:00+02:00",
+  "text": "От 13ч. до около 17ч. са възможни смущения и спиране на водоподаването на село Осеново.",
+  "fields": {
+   "kind": "emergency"
+  }
+ },
+ "expected": [
+  {
+   "start": "2026-11-11T13:00:00+02:00",
+   "end": "2026-11-11T17:00:00+02:00",
+   "end_approximate": true,
+   "severity": "cut",
+   "kind": "emergency",
+   "settlement": "Осеново",
+   "places": []
+  }
+ ]
+}

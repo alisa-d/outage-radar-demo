@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/alisa/outage-radar/internal/clock"
+	"github.com/alisa/outage-radar/internal/ingest"
+	"github.com/alisa/outage-radar/internal/ingest/erpsever"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -28,6 +30,7 @@ type Config struct {
 	Role        string // api | ingest | notify | all
 	DatabaseURL string
 	HTTPAddr    string
+	ErpSeverURL string // base URL of the ЕРП Север site
 	DataKey     string // base64 32-byte key-encryption key (env key provider)
 	SMTPAddr    string
 	SMTPUser    string
@@ -45,7 +48,8 @@ func ConfigFromEnv() Config {
 	}
 	return Config{Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"),
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
-		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081")}
+		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
+		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg")}
 }
 
 // Handler processes one job; returning an error retries it with backoff.
@@ -153,7 +157,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, subs)}
+		srv := &http.Server{Handler: newMux(pool, subs, clk)}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()
@@ -170,6 +174,12 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 	if runWorker {
 		a.wg.Add(1)
 		go func() { defer a.wg.Done(); work(ctx, pool, clk, handlers) }()
+		if cfg.Role != "notify" {
+			// Registering a Provider is adding its adapter here.
+			adapters := []ingest.Adapter{erpsever.New(cfg.ErpSeverURL)}
+			a.wg.Add(1)
+			go func() { defer a.wg.Done(); ingest.Run(ctx, pool, clk, adapters) }()
+		}
 	}
 	return a, nil
 }

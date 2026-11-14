@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,32 +68,34 @@ type System struct {
 	URL       string
 	Clock     *clock.Fake
 	DSN       string
-	Providers *httptest.Server // stub provider sites
+	Providers *httptest.Server // stub provider sites; set the replayed responses with StubProviders
 	Claude    *httptest.Server // stub Claude API
 	SMTP      *SMTPSink
 	App       *app.App
+	stub      atomic.Pointer[http.Handler]
 }
 
 // Start migrates a fresh database and runs the app against it.
 func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	t.Helper()
 	dsn := NewDatabase(t)
+	var s *System
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	if err := app.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	s := &System{
+	s = &System{
 		DSN:       dsn,
 		Clock:     clock.NewFake(time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)),
-		Providers: httptest.NewServer(http.NotFoundHandler()),
+		Providers: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.providerHandler().ServeHTTP(w, r) })),
 		Claude:    httptest.NewServer(http.NotFoundHandler()),
 		SMTP:      newSMTPSink(t),
 	}
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
 	a, err := app.Start(ctx, app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
-		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test"}, s.Clock, handlers)
+		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL}, s.Clock, handlers)
 	if err != nil {
 		t.Fatalf("start app: %v", err)
 	}
@@ -100,6 +103,16 @@ func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	s.App = a
 	s.URL = "http://" + a.Addr()
 	return s
+}
+
+// StubProviders sets what the stub provider sites answer (404 until called).
+func (s *System) StubProviders(h http.Handler) { s.stub.Store(&h) }
+
+func (s *System) providerHandler() http.Handler {
+	if h := s.stub.Load(); h != nil {
+		return *h
+	}
+	return http.NotFoundHandler()
 }
 
 // SMTPSink accepts mail on a local port and records the raw messages.

@@ -267,7 +267,7 @@ func (b *backoffice) stats(ctx context.Context) (any, error) {
 	})
 
 	arows, err := b.pool.Query(ctx, `SELECT (created_at AT TIME ZONE 'Europe/Sofia')::date::text, count(*), count(*) FILTER (WHERE delivery = 'delivered')
-		FROM alerts GROUP BY 1 ORDER BY 1`)
+		FROM alerts WHERE NOT shadow GROUP BY 1 ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}

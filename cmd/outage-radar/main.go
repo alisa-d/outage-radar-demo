@@ -38,6 +38,16 @@ func run() error {
 		}
 		return app.ImportOSM(ctx, cfg.DatabaseURL, f, ekatte)
 	}
+	if len(os.Args) > 3 && os.Args[1] == "provider-mode" { // provider-mode <provider> <shadow|live>
+		return app.SetProviderMode(ctx, cfg.DatabaseURL, os.Args[2], os.Args[3], "cli")
+	}
+	if len(os.Args) > 1 && os.Args[1] == "shadow-alerts" { // shadow-alerts [provider]
+		provider := ""
+		if len(os.Args) > 2 {
+			provider = os.Args[2]
+		}
+		return app.ShadowAlerts(ctx, cfg.DatabaseURL, provider, os.Stdout)
+	}
 	if len(os.Args) > 2 && os.Args[1] == "import-gazetteer" { // import-gazetteer <overpass.json> [ekatte]
 		f, err := os.Open(os.Args[2])
 		if err != nil {

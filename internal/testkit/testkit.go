@@ -110,6 +110,10 @@ func startAt(t testing.TB, role string, handlers map[string]app.Handler, tweak f
 	if err := app.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	// Demo Providers are seeded in Shadow Mode; tests run them live unless they switch back.
+	if err := setLive(ctx, dsn); err != nil {
+		t.Fatalf("providers live: %v", err)
+	}
 	s = &System{
 		DSN:       dsn,
 		Clock:     clock.NewFake(now),
@@ -241,4 +245,14 @@ func (s *SMTPSink) failing() bool {
 		return true
 	}
 	return false
+}
+
+func setLive(ctx context.Context, dsn string) error {
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	_, err = pool.Exec(ctx, `UPDATE providers SET shadow = false`)
+	return err
 }

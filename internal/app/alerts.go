@@ -341,7 +341,8 @@ func plainNotice(t string) string {
 	return strings.ReplaceAll(strings.TrimSpace(b.String()), "\n", "\r\n")
 }
 
-// unsubscribe is the RFC 8058 one-click endpoint: a POST disables the Contact Channel at once.
+// unsubscribe is the RFC 8058 one-click endpoint: a POST removes the Contact Channel at once
+// (and the Subscriber with it when it was the last one), exactly like removal in management.
 func (s *subscriptions) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	tok := r.URL.Query().Get("token")
 	id, _, ok := strings.Cut(tok, ".")
@@ -350,7 +351,12 @@ func (s *subscriptions) unsubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid link", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.pool.Exec(r.Context(), `UPDATE contact_channels SET disabled_at = $2 WHERE id = $1 AND disabled_at IS NULL`, ch, s.clk.Now()); err != nil {
+	var sub int64
+	err = s.pool.QueryRow(r.Context(), `SELECT subscriber_id FROM contact_channels WHERE id = $1`, ch).Scan(&sub)
+	if err == nil {
+		_, err = s.deleteChannel(r.Context(), ch, sub)
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) { // already gone: unsubscribing again is fine
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

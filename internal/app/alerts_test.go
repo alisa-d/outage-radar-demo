@@ -187,3 +187,23 @@ func TestUnverifiedChannelsNeverGetAlertsAndTheBreakerDoesNotBlockVerifiedOnes(t
 		t.Errorf("alert to %s", m.To)
 	}
 }
+
+func TestUnsubscribeRemovesTheChannelAndALaterSignupWorks(t *testing.T) {
+	s, down := watcher(t, "en")
+	publish(s, down, hrow(1, intro+"ул. Дойран.", "9:00", "17:00"))
+	waitMail(t, s, 2)
+	raw := s.SMTP.Messages()[1]
+	h := regexp.MustCompile(`(?m)^List-Unsubscribe: <http://app\.test(/api/unsubscribe\?token=[^>]+)>\r$`).FindStringSubmatch(raw)
+	for i := 0; i < 2; i++ { // repeating the link is harmless
+		if c, _ := post(t, s.URL+h[1], nil); c != 204 {
+			t.Fatalf("unsubscribe %d: %d", i, c)
+		}
+	}
+	for _, tbl := range []string{"contact_channels", "subscribers", "watched_addresses", "consents"} {
+		if n := count(t, s, "SELECT count(*) FROM "+tbl); n != 0 {
+			t.Errorf("%s holds %d rows", tbl, n)
+		}
+	}
+	signup(t, s, "ivan@example.com", "en", addr{streets(t, s, "10135", "doyran")[0].ID, "11"})
+	waitMail(t, s, 3)
+}

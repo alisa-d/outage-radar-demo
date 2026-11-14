@@ -403,33 +403,38 @@ func (s *subscriptions) addChannel(w http.ResponseWriter, r *http.Request, sub i
 	w.Write([]byte(`{"status":"if the email is new, a verification email is on its way"}`))
 }
 
-// removeChannel deletes the whole Subscriber when no verified channel would remain.
+// deleteChannel removes a Contact Channel, and the whole Subscriber when no verified channel would remain.
+// It reports whether the channel existed.
+func (s *subscriptions) deleteChannel(ctx context.Context, id, sub int64) (bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM contact_channels WHERE id = $1 AND subscriber_id = $2`, id, sub)
+	if err != nil || tag.RowsAffected() == 0 {
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM subscribers WHERE id = $1
+		AND NOT EXISTS (SELECT 1 FROM contact_channels WHERE subscriber_id = $1 AND verified_at IS NOT NULL)`, sub); err != nil {
+		return false, err
+	}
+	return true, tx.Commit(ctx)
+}
+
 func (s *subscriptions) removeChannel(w http.ResponseWriter, r *http.Request, sub int64) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
+	found, err := s.deleteChannel(r.Context(), id, sub)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context())
-	tag, err := tx.Exec(r.Context(), `DELETE FROM contact_channels WHERE id = $1 AND subscriber_id = $2`, id, sub)
-	if err == nil && tag.RowsAffected() == 0 {
+	if !found {
 		http.NotFound(w, r)
-		return
-	}
-	if err == nil {
-		_, err = tx.Exec(r.Context(), `DELETE FROM subscribers WHERE id = $1
-			AND NOT EXISTS (SELECT 1 FROM contact_channels WHERE subscriber_id = $1 AND verified_at IS NOT NULL)`, sub)
-	}
-	if err == nil {
-		err = tx.Commit(r.Context())
-	}
-	if err != nil {
-		fail(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

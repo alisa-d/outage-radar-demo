@@ -35,6 +35,11 @@ type Outage struct {
 	Places         []string
 }
 
+// Extractor turns a Notice into Outages. Parsers and the LLM both satisfy it.
+type Extractor interface {
+	Extract(n Notice) ([]Outage, error)
+}
+
 // Adapter is everything a Provider needs to plug in.
 type Adapter interface {
 	Name() string // must match providers.name

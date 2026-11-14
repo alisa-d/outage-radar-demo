@@ -71,6 +71,7 @@ type System struct {
 	Providers *httptest.Server // stub provider sites; set the replayed responses with StubProviders
 	Claude    *httptest.Server // stub Claude API
 	SMTP      *SMTPSink
+	OIDC      *OIDC // stub identity provider for the backoffice
 	App       *app.App
 	stub      atomic.Pointer[http.Handler]
 }
@@ -101,6 +102,7 @@ func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak
 		Claude:    httptest.NewServer(http.NotFoundHandler()),
 		SMTP:      newSMTPSink(t),
 	}
+	s.OIDC = newOIDC(t, func() time.Time { return s.Clock.Now() })
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +112,7 @@ func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak
 	t.Cleanup(ts.Close)
 	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
 		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL,
+		OIDCIssuer: s.OIDC.URL, OIDCClientID: OIDCClientID,
 		TurnstileSecret: "test-secret", TurnstileURL: ts.URL,
 		IPLimit: 1000, ChannelLimit: 1000, AddressLimit: 1000, ChannelDailyCap: 1000, EmailDailyBudget: 1000}
 	if tweak != nil {

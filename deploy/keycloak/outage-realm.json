@@ -1,0 +1,62 @@
+{
+  "realm": "outage",
+  "enabled": true,
+  "sslRequired": "none",
+  "roles": { "realm": [{ "name": "operator" }, { "name": "privacy_officer" }] },
+  "browserFlow": "browser-2fa",
+  "authenticationFlows": [
+    {
+      "alias": "browser-2fa",
+      "description": "Password and a one-time code are both required for every sign-in",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "requirement": "ALTERNATIVE", "priority": 10, "userSetupAllowed": false, "autheticatorFlow": false },
+        { "flowAlias": "browser-2fa-forms", "requirement": "ALTERNATIVE", "priority": 20, "userSetupAllowed": false, "autheticatorFlow": true }
+      ]
+    },
+    {
+      "alias": "browser-2fa-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-username-password-form", "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false, "autheticatorFlow": false },
+        { "authenticator": "auth-otp-form", "requirement": "REQUIRED", "priority": 20, "userSetupAllowed": false, "autheticatorFlow": false }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "backoffice",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["http://localhost:8081/backoffice/*"],
+      "protocolMappers": [
+        {
+          "name": "amr-otp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "config": { "claim.name": "amr", "claim.value": "[\"pwd\",\"otp\"]", "jsonType.label": "JSON", "id.token.claim": "true", "access.token.claim": "true" }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "operator",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "operator", "temporary": false }],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "realmRoles": ["operator"]
+    },
+    {
+      "username": "privacy",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "privacy", "temporary": false }],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "realmRoles": ["privacy_officer"]
+    }
+  ]
+}

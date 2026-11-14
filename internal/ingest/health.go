@@ -16,13 +16,14 @@ var ErrFormat = errors.New("unexpected response format")
 type Health struct {
 	State       string // healthy | stale | suspicious | unknown (no fetch has succeeded yet)
 	LastSuccess *time.Time
+	LastError   string // most recent failed fetch, cleared by a success
 }
 
 // Healths derives every Provider's health at now, keyed by Provider name.
 // Providers without an adapter are "unknown". Stale is 3x the polling interval since the last success.
 func Healths(ctx context.Context, pool *pgxpool.Pool, now time.Time) (map[string]Health, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT p.name, h.last_success_at, CASE
+		SELECT p.name, h.last_success_at, coalesce(h.last_error, ''), CASE
 		  WHEN h.provider_id IS NULL THEN 'unknown'
 		  WHEN $1 - coalesce(h.last_success_at, h.first_seen_at) > 3 * h.interval_s * interval '1 second' THEN 'stale'
 		  WHEN h.suspicious THEN 'suspicious'
@@ -37,7 +38,7 @@ func Healths(ctx context.Context, pool *pgxpool.Pool, now time.Time) (map[string
 	for rows.Next() {
 		var name string
 		var h Health
-		if err := rows.Scan(&name, &h.LastSuccess, &h.State); err != nil {
+		if err := rows.Scan(&name, &h.LastSuccess, &h.LastError, &h.State); err != nil {
 			return nil, err
 		}
 		out[name] = h

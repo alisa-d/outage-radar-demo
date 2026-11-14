@@ -43,6 +43,9 @@ type Config struct {
 	MailFrom    string
 	PublicURL   string // base of links in emails
 
+	OIDCIssuer   string // backoffice sign-in; empty disables the backoffice API
+	OIDCClientID string // expected audience of ID tokens
+
 	TurnstileSecret  string
 	TurnstileURL     string // siteverify endpoint
 	IPLimit          int    // signup or verify requests per IP per hour
@@ -68,6 +71,7 @@ func ConfigFromEnv() Config {
 	return Config{TurnstileSecret: os.Getenv("TURNSTILE_SECRET"), TurnstileURL: get("TURNSTILE_URL", "https://challenges.cloudflare.com/turnstile/v0/siteverify"),
 		IPLimit: num("LIMIT_IP", 20), ChannelLimit: num("LIMIT_CHANNEL", 3), AddressLimit: num("LIMIT_ADDRESS", 30),
 		ChannelDailyCap: num("CAP_CHANNEL_DAILY", 5), EmailDailyBudget: num("BUDGET_EMAIL_DAILY", 100000),
+		OIDCIssuer: os.Getenv("OIDC_ISSUER"), OIDCClientID: get("OIDC_CLIENT_ID", "backoffice"),
 		Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"),
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
 		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
@@ -190,7 +194,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{DisableCompression: true}))}
+		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{DisableCompression: true}), &backoffice{pool: pool, subs: subs, clk: clk, cfg: cfg})}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()

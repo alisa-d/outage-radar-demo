@@ -278,11 +278,17 @@ func (s *subscriptions) export(w http.ResponseWriter, r *http.Request, sub int64
 }
 
 func (s *subscriptions) erase(w http.ResponseWriter, r *http.Request, sub int64) {
-	if _, err := s.pool.Exec(r.Context(), `DELETE FROM subscribers WHERE id = $1`, sub); err != nil {
+	if err := s.eraseSubscriber(r.Context(), sub); err != nil {
 		fail(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// eraseSubscriber is the one erasure path, shared by self-service and the Privacy officer.
+func (s *subscriptions) eraseSubscriber(ctx context.Context, sub int64) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM subscribers WHERE id = $1`, sub)
+	return err
 }
 
 func (s *subscriptions) setLanguage(w http.ResponseWriter, r *http.Request, sub int64) {

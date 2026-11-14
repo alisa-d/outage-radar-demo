@@ -37,6 +37,10 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 		return nil
 	}
 	now := s.clk.Now()
+	var shadow bool
+	if err := s.pool.QueryRow(ctx, `SELECT p.shadow FROM notices n JOIN providers p ON p.id = n.provider_id WHERE n.id = $1`, noticeID).Scan(&shadow); err != nil {
+		return err
+	}
 	type outage struct {
 		ordinal    int
 		severity   string
@@ -110,7 +114,7 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 				continue
 			}
 			sum := sha256.Sum256([]byte(fmt.Sprint(noticeID, o.ordinal, w.id, m, o.start.Unix(), o.end.Unix())))
-			if err := s.createAlert(ctx, hex.EncodeToString(sum[:]), w.sub, w.id, noticeID, o.ordinal, m, o.severity, o.start, o.end); err != nil {
+			if err := s.createAlert(ctx, hex.EncodeToString(sum[:]), w.sub, w.id, noticeID, o.ordinal, m, o.severity, o.start, o.end, shadow); err != nil {
 				return err
 			}
 		}
@@ -118,7 +122,7 @@ func (s *subscriptions) scanAlerts(ctx context.Context, payload []byte) error {
 	return nil
 }
 
-func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, notice int64, ordinal int, match, severity string, start, end time.Time) error {
+func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, notice int64, ordinal int, match, severity string, start, end time.Time, shadow bool) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -137,13 +141,16 @@ func (s *subscriptions) createAlert(ctx context.Context, key string, sub, wa, no
 		return err
 	}
 	var id int64
-	err = tx.QueryRow(ctx, `INSERT INTO alerts (created_at, delivery, dedup_key, subscriber_id, watched_address_id, notice_id, ordinal, match_result, severity, start_at, end_at)
-		VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (dedup_key) DO NOTHING RETURNING id`,
-		s.clk.Now(), key, sub, wa, notice, ordinal, match, severity, start, end).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO alerts (created_at, delivery, dedup_key, subscriber_id, watched_address_id, notice_id, ordinal, match_result, severity, start_at, end_at, shadow)
+		VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (dedup_key) DO NOTHING RETURNING id`,
+		s.clk.Now(), key, sub, wa, notice, ordinal, match, severity, start, end, shadow).Scan(&id)
 	if err == pgx.ErrNoRows {
 		return nil
 	} else if err != nil {
 		return err
+	}
+	if shadow { // recorded only: no delivery jobs, so going live later sends no backlog
+		return tx.Commit(ctx)
 	}
 	crows, err := tx.Query(ctx, `SELECT id FROM contact_channels WHERE subscriber_id = $1 AND verified_at IS NOT NULL AND disabled_at IS NULL ORDER BY id`, sub)
 	if err != nil {

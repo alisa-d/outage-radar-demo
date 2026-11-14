@@ -46,6 +46,7 @@ func (b *backoffice) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /backoffice/api/stats", b.handle(roleOperator, "view_stats", b.stats))
 	mux.HandleFunc("GET /backoffice/api/audit", b.handle(rolePrivacy, "view_audit_log", b.audit))
 	b.reviewRoutes(mux)
+	b.shadowRoutes(mux)
 }
 
 // handle authenticates, checks 2FA and role, runs fn and records the action before answering.

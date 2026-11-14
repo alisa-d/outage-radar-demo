@@ -3,11 +3,15 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var translit = map[rune]string{
@@ -41,6 +45,82 @@ func normalize(s string) string {
 		words = append(words, b.String())
 	}
 	return strings.Join(words, " ")
+}
+
+var errNotFound = errors.New("not found")
+
+type building struct {
+	Number      string  `json:"number"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Approximate bool    `json:"approximate"`
+}
+
+func leadingInt(s string) (int, bool) {
+	n, err := strconv.Atoi(strings.TrimRightFunc(s, func(r rune) bool { return !unicode.IsDigit(r) }))
+	return n, err == nil
+}
+
+// lookupNumber returns the registry position of a building, interpolating along the
+// street when OSM lacks the number: odd numbers on the left of the street's direction,
+// even on the right.
+func lookupNumber(ctx context.Context, pool *pgxpool.Pool, streetID, number string) (building, error) {
+	id, err := strconv.Atoi(streetID)
+	num, ok := leadingInt(number)
+	if err != nil || !ok {
+		return building{}, errNotFound
+	}
+	number = strings.ToUpper(number)
+	var geom []byte
+	if err := pool.QueryRow(ctx, `SELECT geom FROM streets WHERE id = $1`, id).Scan(&geom); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return building{}, errNotFound
+		}
+		return building{}, err
+	}
+	rows, err := pool.Query(ctx, `SELECT number, lat, lon FROM house_numbers WHERE street_id = $1`, id)
+	if err != nil {
+		return building{}, err
+	}
+	defer rows.Close()
+	var known []building
+	for rows.Next() {
+		var b building
+		if err := rows.Scan(&b.Number, &b.Lat, &b.Lon); err != nil {
+			return building{}, err
+		}
+		if b.Number == number {
+			return b, nil
+		}
+		known = append(known, b)
+	}
+	var pts [][2]float64
+	if err := json.Unmarshal(geom, &pts); err != nil {
+		return building{}, err
+	}
+	ln := newLine(pts)
+	var same, all []anchor
+	for _, b := range known {
+		if k, ok := leadingInt(b.Number); ok {
+			a := anchor{k, ln.project(b.Lat, b.Lon)}
+			all = append(all, a)
+			if k%2 == num%2 {
+				same = append(same, a)
+			}
+		}
+	}
+	if len(same) == 0 {
+		same = all
+	}
+	if len(same) == 0 {
+		return building{}, errNotFound
+	}
+	side := sideOffsetM
+	if num%2 == 0 {
+		side = -side
+	}
+	lat, lon := ln.at(interpolateS(same, num), side)
+	return building{Number: number, Lat: lat, Lon: lon, Approximate: true}, nil
 }
 
 type latLon struct{ Lat, Lon float64 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,7 +11,7 @@ import (
 const regionsQuery = `
 SELECT coalesce(json_agg(json_build_object(
   'id', r.id, 'name', r.name,
-  'settlements', (SELECT coalesce(json_agg(json_build_object('name', s.name, 'ekatte', s.ekatte) ORDER BY s.id), '[]') FROM settlements s WHERE s.region_id = r.id),
+  'settlements', (SELECT coalesce(json_agg(json_build_object('name', s.name, 'ekatte', s.ekatte, 'streets', EXISTS (SELECT 1 FROM streets st WHERE st.settlement_id = s.id)) ORDER BY s.id), '[]') FROM settlements s WHERE s.region_id = r.id),
   'providers',   (SELECT coalesce(json_agg(json_build_object('name', p.name, 'utility', p.utility, 'coverage', p.coverage) ORDER BY p.id), '[]') FROM providers p WHERE p.region_id = r.id)
 ) ORDER BY r.id), '[]') FROM regions r`
 
@@ -44,6 +45,18 @@ func newMux(pool *pgxpool.Pool) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("GET /api/streets/{id}/numbers/{number}", func(w http.ResponseWriter, r *http.Request) {
+		b, err := lookupNumber(r.Context(), pool, r.PathValue("id"), r.PathValue("number"))
+		if errors.Is(err, errNotFound) {
+			http.NotFound(w, r)
+			return
+		} else if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(b)
 	})
 	return mux
 }

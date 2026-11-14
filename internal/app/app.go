@@ -182,6 +182,8 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 		handlers = map[string]Handler{}
 	}
 	handlers[verifyEmailJob] = func(ctx context.Context, p []byte) error { return subs.sendVerifyEmail(ctx, p) }
+	handlers[scanAlertsJob] = func(ctx context.Context, p []byte) error { return subs.scanAlerts(ctx, p) }
+	handlers[sendAlertJob] = func(ctx context.Context, p []byte) error { return subs.sendAlert(ctx, p) }
 	reg := prometheus.NewRegistry()
 	exp, err := otelprom.New(otelprom.WithRegisterer(reg))
 	if err != nil {

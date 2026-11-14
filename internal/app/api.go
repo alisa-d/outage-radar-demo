@@ -27,6 +27,7 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics ht
 	mux.HandleFunc("POST /api/verify", subs.verify)
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); metrics.ServeHTTP(w, r) })
 	subs.routes(mux)
+	mux.HandleFunc("POST /api/unsubscribe", subs.unsubscribe)
 	bo.routes(mux)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte

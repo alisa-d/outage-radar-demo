@@ -59,6 +59,8 @@ type Config struct {
 	AddressLimit     int    // signups per Address per hour
 	ChannelDailyCap  int    // verification attempts per Contact Channel per day
 	EmailDailyBudget int    // circuit breaker: verification emails per day, all channels
+
+	BrevoWebhookToken string // bearer token Brevo sends with webhooks; empty rejects every call
 }
 
 func ConfigFromEnv() Config {
@@ -82,7 +84,7 @@ func ConfigFromEnv() Config {
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
 		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
 		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg"),
-		VikVarnaURL: get("VIKVARNA_BASE_URL", "https://vikvarna.com"), AnthropicURL: get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"), AnthropicKey: os.Getenv("ANTHROPIC_API_KEY")}
+		VikVarnaURL: get("VIKVARNA_BASE_URL", "https://vikvarna.com"), AnthropicURL: get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"), AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"), BrevoWebhookToken: os.Getenv("BREVO_WEBHOOK_TOKEN")}
 }
 
 // Handler processes one job; returning an error retries it with backoff.

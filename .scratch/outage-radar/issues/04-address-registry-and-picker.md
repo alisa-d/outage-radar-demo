@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Walking skeleton)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -13,3 +13,13 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] A house number missing in OSM gets an interpolated position flagged approximate
 - [ ] The picker shows a pin the user can confirm or drag, and the confirmed coordinates are returned
 - [ ] Choosing a non-Varna Settlement skips street selection
+
+## Answer
+
+- Registry seeded from OSM (Settlements with ЕКАТТЕ, streets, house numbers); missing numbers interpolated along street geometry, odd/even on opposite sides, flagged approximate.
+- Public API: street autocomplete per Settlement and building-number lookup returning coordinates plus the approximate flag.
+- UI: AddressPicker (Settlement, street, number, draggable pin); confirmed position is what later steps use.
+
+Merge commit: e843f94 on `feat/outage-radar`.
+
+Known gaps: picker never run in a browser; only a hand-written OSM fixture tested; multi-way streets keep only the last way; single transliteration scheme.

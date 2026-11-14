@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 (Address registry and picker)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -15,3 +15,15 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] A sixth Watched Address is refused
 - [ ] With the clock advanced 24h, unverified signups are purged
 - [ ] No personal data appears in logs during these flows
+
+## Answer
+
+- Anonymous email signup returns one neutral response; a signed, short-lived, single-use magic link verifies the channel and records consent (time and privacy notice version).
+- Contacts and Watched Addresses are envelope-encrypted per field behind a key-provider interface, with an HMAC blind index for lookup and uniqueness; max 5 addresses; unverified signups purged after 24h; mail via the SMTP adapter.
+- Merged to `feat/outage-radar` in merge commit c07e521 (migration 003_subscribers.sql).
+
+Known gaps:
+- No CAPTCHA/Turnstile check.
+- No frontend /verify page yet: the email link is PUBLIC_URL/verify?token=..., and the page must POST /api/verify.
+- Tested only against the in-test SMTP sink.
+- No timing equalisation for already-verified emails.

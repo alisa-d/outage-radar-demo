@@ -4,7 +4,7 @@
 
 **Blocked by:** 11 (Subscribe and verify by email)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -14,3 +14,17 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] The export contains every piece of personal data held, in a machine-readable format
 - [ ] Delete-everything leaves no Subscriber data behind
 - [ ] Requesting a link for an unknown email looks identical to a known one
+
+## Answer
+
+A Subscriber can request a one-time, expiring management link; the response is identical for known and unknown emails.
+Through it they edit Contact Channels and language, export all their data, or delete everything; removing the last channel deletes the Subscriber.
+Merged as dec4974 on feat/outage-radar (migration renumbered to 006_management.sql).
+
+Known gaps:
+- Tests were written alongside the code and never seen failing.
+- /manage and /verify pages are built but never opened in a browser; no frontend tests.
+- /manage cannot add a Watched Address: AddressPicker returns a street name, not a street id.
+- Queued verify-email jobs are not linked to a Subscriber, so erasure leaves a pending one.
+- The log-leak test does not cover management flows.
+- No timing equalisation, and no CAPTCHA or rate limit on the new /api/manage endpoints.

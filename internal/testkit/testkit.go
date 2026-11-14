@@ -82,11 +82,25 @@ func (s *System) StubClaude(h http.Handler) { s.claude.Store(&h) }
 // Start migrates a fresh database and runs the app against it.
 func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	t.Helper()
-	return StartAt(t, role, handlers, time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC))
+	return StartWith(t, role, handlers, nil)
+}
+
+// ValidTurnstileToken is the only token the stub Turnstile accepts.
+const ValidTurnstileToken = "valid-token"
+
+// StartWith is Start with a hook to adjust the Config (limits are generous by default).
+func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak func(*app.Config)) *System {
+	t.Helper()
+	return startAt(t, role, handlers, tweak, time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC))
 }
 
 // StartAt is Start with the fake clock set to now.
 func StartAt(t testing.TB, role string, handlers map[string]app.Handler, now time.Time) *System {
+	t.Helper()
+	return startAt(t, role, handlers, nil, now)
+}
+
+func startAt(t testing.TB, role string, handlers map[string]app.Handler, tweak func(*app.Config), now time.Time) *System {
 	t.Helper()
 	dsn := NewDatabase(t)
 	var s *System
@@ -110,8 +124,19 @@ func StartAt(t testing.TB, role string, handlers map[string]app.Handler, now tim
 	}
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
-	a, err := app.Start(ctx, app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
-		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL, VikVarnaURL: s.Providers.URL, AnthropicURL: s.Claude.URL, AnthropicKey: "test-key"}, s.Clock, handlers)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		fmt.Fprintf(w, `{"success":%t}`, r.Form.Get("secret") == "test-secret" && r.Form.Get("response") == ValidTurnstileToken)
+	}))
+	t.Cleanup(ts.Close)
+	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
+		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL, VikVarnaURL: s.Providers.URL, AnthropicURL: s.Claude.URL, AnthropicKey: "test-key",
+		TurnstileSecret: "test-secret", TurnstileURL: ts.URL,
+		IPLimit: 1000, ChannelLimit: 1000, AddressLimit: 1000, ChannelDailyCap: 1000, EmailDailyBudget: 1000}
+	if tweak != nil {
+		tweak(&cfg)
+	}
+	a, err := app.Start(ctx, cfg, s.Clock, handlers)
 	if err != nil {
 		t.Fatalf("start app: %v", err)
 	}

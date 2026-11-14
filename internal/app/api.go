@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alisa/outage-radar/internal/clock"
-	"github.com/alisa/outage-radar/internal/ingest"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +22,8 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock) http.Handl
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
 	mux.HandleFunc("POST /api/verify", subs.verify)
+	mux.HandleFunc("GET /metrics", subs.metrics)
+	subs.routes(mux)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte
 		if err := pool.QueryRow(r.Context(), regionsQuery).Scan(&body); err != nil {
@@ -64,7 +65,6 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock) http.Handl
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(b)
 	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { ingest.WriteMetrics(w) })
 	mux.HandleFunc("GET /api/regions/{id}/outages", func(w http.ResponseWriter, r *http.Request) {
 		body, err := regionOutages(r, pool, clk)
 		if err != nil {

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Walking skeleton)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -14,3 +14,20 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] Multi-day windows and approximate end times are represented correctly in Europe/Sofia time
 - [ ] The Region page shows Outages grouped by day and Settlement, with original text, in both languages
 - [ ] Adding this adapter required no changes outside the adapter beyond registering it
+
+## Answer
+
+- ЕРП Север adapter polls `for_next_48_hours` and `all_active`, dedupes Notices by Provider ID and re-extracts on changed text.
+- Deterministic parser yields Outages (Europe/Sofia window, approximate flag, Cut/Disturbance, place descriptions); Region page groups by day and Settlement in bg/en.
+- Migration 004_notices_outages.sql; adapter registered via ingest package.
+
+Merge commit: `416eba2` on `feat/outage-radar`.
+
+Known gaps:
+- Approximate-end ("около") detection only tested with a synthetic feed.
+- disturbance_hours ignored.
+- Only offset 0 fetched.
+- No failure backoff.
+- Svelte page never run in a browser.
+- No standalone parser tests.
+- ТП substations stay in place text.

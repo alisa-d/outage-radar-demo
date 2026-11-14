@@ -15,8 +15,10 @@ SELECT coalesce(json_agg(json_build_object(
   'providers',   (SELECT coalesce(json_agg(json_build_object('name', p.name, 'utility', p.utility, 'coverage', p.coverage) ORDER BY p.id), '[]') FROM providers p WHERE p.region_id = r.id)
 ) ORDER BY r.id), '[]') FROM regions r`
 
-func newMux(pool *pgxpool.Pool) http.Handler {
+func newMux(pool *pgxpool.Pool, subs *subscriptions) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
+	mux.HandleFunc("POST /api/verify", subs.verify)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte
 		if err := pool.QueryRow(r.Context(), regionsQuery).Scan(&body); err != nil {

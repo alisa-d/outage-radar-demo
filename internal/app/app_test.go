@@ -62,6 +62,7 @@ func TestRolesAreSelectedOnlyByEnvironment(t *testing.T) {
 		t.Run(c.role, func(t *testing.T) {
 			t.Setenv("ROLE", c.role)
 			t.Setenv("HTTP_ADDR", "127.0.0.1:0")
+			t.Setenv("DATA_KEY", "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
 			t.Setenv("DATABASE_URL", testkit.NewDatabase(t))
 			cfg := app.ConfigFromEnv()
 			ctx, cancel := context.WithCancel(context.Background())

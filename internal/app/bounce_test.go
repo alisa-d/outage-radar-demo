@@ -45,7 +45,7 @@ func bounceWatcher(t *testing.T) (*testkit.System, *atomic.Bool) {
 
 func metricsText(t *testing.T, s *testkit.System) string {
 	t.Helper()
-	resp, err := http.Get(s.URL + "/metrics")
+	resp, err := http.Get(s.MetricsURL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,13 @@
+route:
+  receiver: engineering
+  group_by: [alertname]
+  group_wait: 5s
+  repeat_interval: 4h
+receivers:
+  - name: engineering
+    email_configs:
+      - to: engineering@outage-radar.invalid
+        from: alertmanager@outage-radar.invalid
+        smarthost: mailpit:1025 # local Mailpit; prod needs a real SMTP smarthost
+        require_tls: false
+        send_resolved: false

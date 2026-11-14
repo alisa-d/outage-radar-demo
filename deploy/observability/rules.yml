@@ -1,0 +1,26 @@
+groups:
+  - name: outage-radar
+    rules:
+      - alert: ProviderStaleOrSuspicious
+        # outage_radar_provider_health: 1 stale, 2 suspicious (0 healthy, -1 unknown)
+        expr: outage_radar_provider_health >= 1
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "Provider {{ $labels.provider }} is {{ $labels.state }}"
+      - alert: AlertDeliveryFailuresSpike
+        expr: sum(increase(delivery_failures_total[15m])) > 5
+        labels: { severity: page }
+        annotations:
+          summary: '{{ $value | printf "%.0f" }} Alert delivery failures in 15 minutes'
+      - alert: CircuitBreakerTripped
+        expr: increase(circuit_breaker_trips_total[10m]) > 0
+        labels: { severity: page }
+        annotations:
+          summary: "Signup circuit breaker tripped: new verifications are paused"
+      - alert: MetricsTargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "Cannot scrape {{ $labels.instance }}"

@@ -156,7 +156,7 @@ func TestAdapterMetricsAreExported(t *testing.T) {
 	s.Clock.Advance(16 * time.Minute)
 	waitState(t, s, "suspicious")
 
-	resp, err := http.Get(s.URL + "/metrics")
+	resp, err := http.Get(s.MetricsURL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
 	}

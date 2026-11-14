@@ -167,7 +167,7 @@ func find(t *testing.T, got []outage, textPart string) outage {
 }
 
 func metrics(t *testing.T, s *testkit.System) string {
-	resp, err := http.Get(s.URL + "/metrics")
+	resp, err := http.Get(s.MetricsURL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"io"
 	"net/http"
 	"strings"
@@ -45,18 +47,23 @@ func (s *subscriptions) brevoWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *subscriptions) deliveryMetrics(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.pool.Query(r.Context(), `SELECT channel, event, count(*) FROM delivery_events GROUP BY 1, 2 ORDER BY 1, 2`)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-	fmt.Fprint(w, "# TYPE delivery_failures_total counter\n")
-	for rows.Next() {
-		var ch, ev string
-		var n int
-		if rows.Scan(&ch, &ev, &n) == nil {
-			fmt.Fprintf(w, "delivery_failures_total{channel=%q,event=%q} %d\n", ch, ev, n)
+// registerDeliveryMetrics exports delivery_events as delivery_failures_total; the table is the counter.
+func (s *subscriptions) registerDeliveryMetrics(m metric.Meter) error {
+	_, err := m.Int64ObservableCounter("delivery_failures", metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+		rows, err := s.pool.Query(ctx, `SELECT channel, event, count(*) FROM delivery_events GROUP BY 1, 2`)
+		if err != nil {
+			return err
 		}
-	}
+		defer rows.Close()
+		for rows.Next() {
+			var ch, ev string
+			var n int64
+			if err := rows.Scan(&ch, &ev, &n); err != nil {
+				return err
+			}
+			o.Observe(n, metric.WithAttributes(attribute.String("channel", ch), attribute.String("event", ev)))
+		}
+		return rows.Err()
+	}))
+	return err
 }

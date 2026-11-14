@@ -5,7 +5,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"net"
 	"net/http"
 	"net/url"
@@ -92,7 +93,7 @@ func (s *subscriptions) limitSignup(w http.ResponseWriter, r *http.Request, emai
 	}
 	if !ok {
 		if !s.tripped.Swap(true) {
-			s.trips.Add(1)
+			s.trips.Add(r.Context(), 1, metric.WithAttributes(attribute.String("channel", "email")))
 		}
 		w.Header().Set("Retry-After", strconv.Itoa(int(hour.Seconds())))
 		http.Error(w, "signups are temporarily paused", http.StatusServiceUnavailable)
@@ -111,10 +112,6 @@ func (s *subscriptions) limitVerify(w http.ResponseWriter, r *http.Request) bool
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 	}
 	return ok
-}
-
-func (s *subscriptions) metrics(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "# TYPE circuit_breaker_trips_total counter\ncircuit_breaker_trips_total{channel=\"email\"} %d\n", s.trips.Load())
 }
 
 func purgeRateHits(ctx context.Context, pool *pgxpool.Pool, now time.Time) {

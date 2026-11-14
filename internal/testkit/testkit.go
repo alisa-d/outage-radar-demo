@@ -65,16 +65,17 @@ func NewDatabase(t testing.TB) string {
 
 // System is a running app plus its stubbed surroundings.
 type System struct {
-	URL       string
-	Clock     *clock.Fake
-	DSN       string
-	Providers *httptest.Server // stub provider sites; set the replayed responses with StubProviders
-	Claude    *httptest.Server // stub Claude API
-	SMTP      *SMTPSink
-	OIDC      *OIDC // stub identity provider for the backoffice
-	App       *app.App
-	stub      atomic.Pointer[http.Handler]
-	claude    atomic.Pointer[http.Handler]
+	URL        string
+	MetricsURL string
+	Clock      *clock.Fake
+	DSN        string
+	Providers  *httptest.Server // stub provider sites; set the replayed responses with StubProviders
+	Claude     *httptest.Server // stub Claude API
+	SMTP       *SMTPSink
+	OIDC       *OIDC // stub identity provider for the backoffice
+	App        *app.App
+	stub       atomic.Pointer[http.Handler]
+	claude     atomic.Pointer[http.Handler]
 }
 
 // StubClaude sets what the stub Claude API answers (404 until called).
@@ -135,7 +136,7 @@ func startAt(t testing.TB, role string, handlers map[string]app.Handler, tweak f
 		fmt.Fprintf(w, `{"success":%t}`, r.Form.Get("secret") == "test-secret" && r.Form.Get("response") == ValidTurnstileToken)
 	}))
 	t.Cleanup(ts.Close)
-	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
+	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0", MetricsAddr: "127.0.0.1:0",
 		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL, VikVarnaURL: s.Providers.URL, AnthropicURL: s.Claude.URL, AnthropicKey: "test-key",
 		OIDCIssuer: s.OIDC.URL, OIDCClientID: OIDCClientID,
 		TurnstileSecret: "test-secret", TurnstileURL: ts.URL,
@@ -150,6 +151,7 @@ func startAt(t testing.TB, role string, handlers map[string]app.Handler, tweak f
 	t.Cleanup(func() { cancel(); a.Wait() })
 	s.App = a
 	s.URL = "http://" + a.Addr()
+	s.MetricsURL = "http://" + a.MetricsAddr()
 	return s
 }
 

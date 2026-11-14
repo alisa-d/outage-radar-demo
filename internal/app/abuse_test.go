@@ -103,7 +103,7 @@ func TestTrippedBreakerPausesNewVerificationsButNotVerifiedSubscribers(t *testin
 }
 
 func metrics(t *testing.T, s *testkit.System) string {
-	resp, err := http.Get(s.URL + "/metrics")
+	resp, err := http.Get(s.MetricsURL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
 	}

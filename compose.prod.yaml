@@ -3,6 +3,8 @@
 x-app-env: &appenv
   DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/outage?sslmode=disable
   ROLE: all
+  # Caddy and the frontend proxy are the only peers of app; X-Forwarded-For is believed from this subnet only.
+  TRUSTED_PROXIES: 10.88.77.0/24
 
 services:
   postgres:
@@ -43,6 +45,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data # certificates: keep across restarts to avoid rate limits
     depends_on: [frontend]
+
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 10.88.77.0/24 }] # fixed so TRUSTED_PROXIES can name it
 
 volumes:
   pgdata:

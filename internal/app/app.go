@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,6 +65,19 @@ type Config struct {
 	EmailDailyBudget int    // circuit breaker: verification emails per day, all channels
 
 	BrevoWebhookToken string // bearer token Brevo sends with webhooks; empty rejects every call
+
+	TrustedProxies []*net.IPNet // peers whose X-Forwarded-For is believed; empty = the TCP peer is the client
+}
+
+// parseCIDRs reads a comma-separated CIDR list; an entry that does not parse is dropped, which trusts less.
+func parseCIDRs(v string) []*net.IPNet {
+	var out []*net.IPNet
+	for _, f := range strings.Split(v, ",") {
+		if _, n, err := net.ParseCIDR(strings.TrimSpace(f)); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func ConfigFromEnv() Config {
@@ -87,7 +101,7 @@ func ConfigFromEnv() Config {
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
 		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
 		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg"),
-		VikVarnaURL: get("VIKVARNA_BASE_URL", "https://vikvarna.com"), AnthropicURL: get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"), AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"), BrevoWebhookToken: os.Getenv("BREVO_WEBHOOK_TOKEN")}
+		VikVarnaURL: get("VIKVARNA_BASE_URL", "https://vikvarna.com"), AnthropicURL: get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"), AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"), BrevoWebhookToken: os.Getenv("BREVO_WEBHOOK_TOKEN"), TrustedProxies: parseCIDRs(os.Getenv("TRUSTED_PROXIES"))}
 }
 
 // Handler processes one job; returning an error retries it with backoff.

@@ -1,0 +1,11 @@
+# Overlay for the browser end-to-end test: no network outside the stack.
+# The API serves, a separate notify worker runs jobs (no ingest, so no live Providers), siteverify is stubbed.
+services:
+  app:
+    environment: { ROLE: api, TURNSTILE_URL: "http://siteverify/" }
+  worker:
+    extends: { file: compose.yaml, service: app }
+    environment: { ROLE: notify, TURNSTILE_URL: "http://siteverify/" }
+  siteverify:
+    image: nginx:alpine
+    volumes: ["./e2e/siteverify.conf:/etc/nginx/conf.d/default.conf:ro"]

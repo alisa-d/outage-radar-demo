@@ -1,0 +1,6 @@
+{"elements":[
+ {"type":"way","id":1,"tags":{"highway":"residential","name":"улица Фердинанд"},
+  "geometry":[{"lat":43.2,"lon":27.9},{"lat":43.2,"lon":27.91}]},
+ {"type":"node","id":10,"lat":43.2,"lon":27.9020,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"10"}},
+ {"type":"node","id":12,"lat":43.2,"lon":27.9040,"tags":{"addr:street":"улица Фердинанд","addr:housenumber":"12"}}
+]}

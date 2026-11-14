@@ -48,6 +48,18 @@ func run() error {
 		}
 		return app.ShadowAlerts(ctx, cfg.DatabaseURL, provider, os.Stdout)
 	}
+	if len(os.Args) > 2 && os.Args[1] == "import-gazetteer" { // import-gazetteer <overpass.json> [ekatte]
+		f, err := os.Open(os.Args[2])
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		ekatte := "10135"
+		if len(os.Args) > 3 {
+			ekatte = os.Args[3]
+		}
+		return app.ImportGazetteer(ctx, cfg.DatabaseURL, f, ekatte)
+	}
 	// Real job handlers are registered by later tickets.
 	a, err := app.Start(ctx, cfg, nil, map[string]app.Handler{})
 	if err != nil {

@@ -156,8 +156,12 @@ func ImportOSM(ctx context.Context, dsn string, r io.Reader, ekatte string) erro
 	for _, e := range doc.Elements {
 		if e.Tags["place"] != "" && e.Tags["ref:ekatte"] != "" && e.Tags["name"] != "" {
 			// Demo has one Region; settlements join it.
-			if _, err := tx.Exec(ctx, `INSERT INTO settlements (region_id, name, ekatte) VALUES ((SELECT min(id) FROM regions), $1, $2)
-				ON CONFLICT (ekatte) DO UPDATE SET name = EXCLUDED.name`, e.Tags["name"], e.Tags["ref:ekatte"]); err != nil {
+			kind := "city"
+			if p := e.Tags["place"]; p == "village" || p == "hamlet" {
+				kind = "village"
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO settlements (region_id, name, ekatte, kind) VALUES ((SELECT min(id) FROM regions), $1, $2, $3)
+				ON CONFLICT (ekatte) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind`, e.Tags["name"], e.Tags["ref:ekatte"], kind); err != nil {
 				return err
 			}
 		}

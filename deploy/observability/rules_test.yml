@@ -1,0 +1,41 @@
+rule_files: [rules.yml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'outage_radar_provider_health{provider="ЕРП Север",state="stale"}'
+        values: "1x5"
+      - series: 'outage_radar_provider_health{provider="ВиК Варна",state="healthy"}'
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ProviderStaleOrSuspicious
+        exp_alerts: [] # not yet for 2m
+      - eval_time: 4m
+        alertname: ProviderStaleOrSuspicious
+        exp_alerts:
+          - exp_labels: { severity: page, provider: "ЕРП Север", state: stale }
+            exp_annotations: { summary: "Provider ЕРП Север is stale" }
+  - interval: 1m
+    input_series:
+      - series: 'delivery_failures_total{channel="email",event="hard_bounce"}'
+        values: "0 0 0 2 4 7 9 9"
+      - series: 'circuit_breaker_trips_total{channel="email"}'
+        values: "0 0 0 0 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AlertDeliveryFailuresSpike
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: AlertDeliveryFailuresSpike
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations: { summary: "9 Alert delivery failures in 15 minutes" }
+      - eval_time: 3m
+        alertname: CircuitBreakerTripped
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CircuitBreakerTripped
+        exp_alerts:
+          - exp_labels: { severity: page, channel: email }
+            exp_annotations: { summary: "Signup circuit breaker tripped: new verifications are paused" }

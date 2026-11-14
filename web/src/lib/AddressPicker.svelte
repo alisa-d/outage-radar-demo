@@ -3,7 +3,7 @@
   import L from 'leaflet';
   import 'leaflet/dist/leaflet.css';
 
-  // settlements: [{name, ekatte, streets}], onconfirm: ({settlement, street?, number?, lat, lon, approximate}) => void
+  // settlements: [{name, ekatte, streets}], onconfirm: ({settlement, street?, streetId?, number?, lat, lon, approximate}) => void
   let { settlements, lang = 'bg', onconfirm } = $props();
   const t = {
     bg: { settlement: 'Населено място', street: 'Улица', number: 'Номер', find: 'Намери', confirm: 'Потвърди позицията', hint: 'Плъзнете маркера, ако позицията не е точна.', approx: 'Приблизителна позиция', none: 'Няма такъв номер' },
@@ -52,7 +52,7 @@
   }
 
   function confirm() {
-    onconfirm({ settlement: settlement.ekatte, street: street?.name, number: num || undefined, lat: pin.lat, lon: pin.lon, approximate: pin.approximate });
+    onconfirm({ settlement: settlement.ekatte, street: street?.name, streetId: street?.id, number: num || undefined, lat: pin.lat, lon: pin.lon, approximate: pin.approximate });
   }
 
   onDestroy(() => map?.remove());

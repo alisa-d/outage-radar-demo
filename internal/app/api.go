@@ -87,7 +87,8 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics ht
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(b)
 	})
-	mux.HandleFunc("GET /api/regions/{id}/outages", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/check", addressCheck(pool, clk))
+	mux.HandleFunc("GET /api/regions/{id}/outages",func(w http.ResponseWriter, r *http.Request) {
 		body, err := regionOutages(r, pool, clk)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)

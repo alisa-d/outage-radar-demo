@@ -1,0 +1,24 @@
+{
+ "provider": "ВиК Варна",
+ "notice": {
+  "external_id": "breakdown/17823",
+  "published": "2026-11-11T00:00:00+02:00",
+  "text": "От 13ч. до около 18ч. част от местност Траката.",
+  "fields": {
+   "kind": "emergency"
+  }
+ },
+ "expected": [
+  {
+   "start": "2026-11-11T13:00:00+02:00",
+   "end": "2026-11-11T18:00:00+02:00",
+   "end_approximate": true,
+   "severity": "cut",
+   "kind": "emergency",
+   "settlement": "Варна",
+   "places": [
+    "част от местност Траката"
+   ]
+  }
+ ]
+}

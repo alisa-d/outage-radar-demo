@@ -157,5 +157,9 @@ func store(ctx context.Context, pool *pgxpool.Pool, providerID int, n Notice, ha
 			return err
 		}
 	}
+	// The Alert scan runs only if the Outages are committed (ADR 0002).
+	if _, err := tx.Exec(ctx, `INSERT INTO jobs (kind, payload) VALUES ('scan-alerts', $1)`, []byte(fmt.Sprint(id))); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }

@@ -267,16 +267,9 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 	qp.Close()
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
 		s.cfg.MailFrom, p.To, mime.QEncoding.Encode("utf-8", tpl.subject), s.clk.Now().Format(time.RFC1123Z), body.String())
-	var auth smtp.Auth
-	if s.cfg.SMTPUser != "" {
-		host, _, _ := strings.Cut(s.cfg.SMTPAddr, ":")
-		auth = smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, host)
-	}
-	from, _ := mail.ParseAddress(s.cfg.MailFrom)
-	// The SMTP error text can echo the recipient, so it is not logged.
-	if err := smtp.SendMail(s.cfg.SMTPAddr, auth, from.Address, []string{p.To}, []byte(msg)); err != nil {
+	if err := s.sendMail(p.To, msg); err != nil {
 		slog.Warn("verification email failed; will retry")
-		return errors.New("smtp send failed")
+		return err
 	}
 	slog.Info("verification email sent")
 	return nil
@@ -293,4 +286,19 @@ func purgeUnverified(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock) {
 		slog.Error("purge unverified failed")
 	}
 	purgeRateHits(ctx, pool, clk.Now())
+}
+
+// sendMail hands a raw message to the SMTP adapter. The SMTP error text can echo the
+// recipient, so it is replaced by a fixed one.
+func (s *subscriptions) sendMail(to, msg string) error {
+	var auth smtp.Auth
+	if s.cfg.SMTPUser != "" {
+		host, _, _ := strings.Cut(s.cfg.SMTPAddr, ":")
+		auth = smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, host)
+	}
+	from, _ := mail.ParseAddress(s.cfg.MailFrom)
+	if err := smtp.SendMail(s.cfg.SMTPAddr, auth, from.Address, []string{to}, []byte(msg)); err != nil {
+		return errors.New("smtp send failed")
+	}
+	return nil
 }

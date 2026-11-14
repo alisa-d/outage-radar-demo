@@ -164,7 +164,11 @@ type SMTPSink struct {
 	Addr string
 	mu   sync.Mutex
 	msgs []string
+	fail int
 }
+
+// FailNext makes the sink answer the next n messages with a transient 451.
+func (s *SMTPSink) FailNext(n int) { s.mu.Lock(); s.fail = n; s.mu.Unlock() }
 
 func (s *SMTPSink) Messages() []string {
 	s.mu.Lock()
@@ -201,6 +205,8 @@ func (s *SMTPSink) serve(c net.Conn) {
 			return
 		}
 		switch cmd := strings.ToUpper(strings.TrimSpace(line)); {
+		case strings.HasPrefix(cmd, "DATA") && s.failing():
+			fmt.Fprint(c, "451 try later\r\n")
 		case strings.HasPrefix(cmd, "DATA"):
 			fmt.Fprint(c, "354 go\r\n")
 			var b strings.Builder
@@ -225,4 +231,14 @@ func (s *SMTPSink) serve(c net.Conn) {
 			fmt.Fprint(c, "250 ok\r\n")
 		}
 	}
+}
+
+func (s *SMTPSink) failing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fail > 0 {
+		s.fail--
+		return true
+	}
+	return false
 }

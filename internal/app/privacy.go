@@ -51,18 +51,13 @@ func (b *backoffice) privacyRoutes(mux *http.ServeMux) {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
-	mux.HandleFunc("GET /backoffice/api/break-glass/{id}", func(w http.ResponseWriter, r *http.Request) {
-		p, ok := b.guard(w, r, rolePrivacy)
-		if !ok {
-			return
-		}
+	mux.HandleFunc("GET /backoffice/api/break-glass/{id}", b.guarded(rolePrivacy, func(w http.ResponseWriter, r *http.Request, p principal) error {
 		var sub int64
 		var reason string
 		err := b.pool.QueryRow(r.Context(), `SELECT subscriber_id, reason FROM break_glass_grants WHERE id = $1 AND officer = $2 AND expires_at > $3`,
 			r.PathValue("id"), p.name, b.clk.Now()).Scan(&sub, &reason)
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "no active break-glass access", http.StatusForbidden)
-			return
+			return httpErr{http.StatusForbidden, "no active break-glass access"}
 		}
 		var v *subscriberView
 		if err == nil {
@@ -71,22 +66,16 @@ func (b *backoffice) privacyRoutes(mux *http.ServeMux) {
 		if err == nil {
 			err = b.record(r.Context(), p.name, "break_glass_view", reason)
 		}
-		if err == nil {
-			err = reply(w, v)
-		}
 		if err != nil {
-			fail(w, err)
+			return err
 		}
-	})
+		return reply(w, v)
+	}))
 }
 
 // privacy runs fn for a Privacy officer on the Subscriber named by the body's email, once a reason is given.
 func (b *backoffice) privacy(fn func(http.ResponseWriter, *http.Request, principal, int64, string) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		p, ok := b.guard(w, r, rolePrivacy)
-		if !ok {
-			return
-		}
+	return b.guarded(rolePrivacy, func(w http.ResponseWriter, r *http.Request, p principal) error {
 		var in struct{ Email, Reason string }
 		email, valid := "", false
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in) == nil {
@@ -94,22 +83,18 @@ func (b *backoffice) privacy(fn func(http.ResponseWriter, *http.Request, princip
 		}
 		reason := strings.TrimSpace(in.Reason)
 		if !valid || reason == "" {
-			http.Error(w, "email and reason are required", http.StatusBadRequest)
-			return
+			return httpErr{http.StatusBadRequest, "email and reason are required"}
 		}
 		var sub int64
 		err := b.pool.QueryRow(r.Context(), `SELECT subscriber_id FROM contact_channels WHERE blind_idx = $1`, blindIndex(b.subs.kp, email)).Scan(&sub)
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		if err == nil {
-			err = fn(w, r, p, sub, reason)
+			return httpErr{http.StatusNotFound, "not found"}
 		}
 		if err != nil {
-			fail(w, err)
+			return err
 		}
-	}
+		return fn(w, r, p, sub, reason)
+	})
 }
 
 func (b *backoffice) record(ctx context.Context, actor, action, reason string) error {

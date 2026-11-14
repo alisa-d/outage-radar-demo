@@ -50,24 +50,56 @@ func (b *backoffice) routes(mux *http.ServeMux) {
 	b.privacyRoutes(mux)
 }
 
-// handle authenticates, checks 2FA and role, runs fn and records the action before answering.
-// Every response is built from aggregates or operational data: nothing here returns decrypted personal data.
+// handle is audited for the endpoints that need neither the request nor the Operator's name.
 func (b *backoffice) handle(role, action string, fn func(context.Context) (any, error)) http.HandlerFunc {
+	return b.audited(role, func(ctx context.Context, _ *http.Request, _ principal) (string, any, error) {
+		out, err := fn(ctx)
+		return action, out, err
+	})
+}
+
+// audited is guarded plus the audit: fn returns the audit action and the JSON answer, and the action is recorded
+// before the answer is sent. Every response is built from aggregates or operational data: nothing here returns
+// decrypted personal data.
+func (b *backoffice) audited(role string, fn func(context.Context, *http.Request, principal) (action string, out any, err error)) http.HandlerFunc {
+	return b.guarded(role, func(w http.ResponseWriter, r *http.Request, p principal) error {
+		action, out, err := fn(r.Context(), r, p)
+		if err == nil {
+			err = b.record(r.Context(), p.name, action, "")
+		}
+		if err != nil {
+			return err
+		}
+		return reply(w, out)
+	})
+}
+
+// guarded is the one entry to every backoffice endpoint: guard, then fn, with fn's error mapped by reject.
+// fn writes its own answer and does its own auditing.
+func (b *backoffice) guarded(role string, fn func(http.ResponseWriter, *http.Request, principal) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, ok := b.guard(w, r, role)
 		if !ok {
 			return
 		}
-		out, err := fn(r.Context())
-		if err == nil {
-			_, err = b.pool.Exec(r.Context(), `INSERT INTO audit_log (at, actor, action) VALUES ($1, $2, $3)`, b.clk.Now(), p.name, action)
+		if err := fn(w, r, p); err != nil {
+			reject(w, err)
 		}
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
+	}
+}
+
+// reject is the one error layer: the shared domain errors keep their status, anything else is a logged 500.
+func reject(w http.ResponseWriter, err error) {
+	var he httpErr
+	switch {
+	case errors.As(err, &he):
+		http.Error(w, he.msg, he.code)
+	case errors.Is(err, errBadMode):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, errUnknownProvider):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	default:
+		fail(w, err)
 	}
 }
 

@@ -31,33 +31,19 @@ var (
 // shortcut: only "ул./бул./пл. Name [numbers]" and "част от ул. Name" are resolved; quarters,
 // landmarks, transformer stations and prose are Not affected here until ticket 08 adds the Gazetteer.
 func matchPlace(place, street, number string) string {
-	m := streetPlace.FindStringSubmatch(strings.TrimSpace(place))
-	if m == nil {
+	part, name, listed, ok := parsePlace(place)
+	if !ok || normalize(name) != normalize(street) {
 		return notAffected
 	}
-	toks := strings.Fields(m[2])
-	name := []string{strings.Trim(toks[0], ",.")}
-	i := 1
-	for ; i < len(toks) && !numberToken.MatchString(strings.Trim(toks[i], ",.")); i++ {
-		name = append(name, strings.Trim(toks[i], ",."))
-	}
-	if normalize(strings.Join(name, " ")) != normalize(street) {
-		return notAffected
-	}
-	listed := strings.FieldsFunc(strings.Join(toks[i:], " "), func(r rune) bool { return r == ',' || r == ' ' })
 	for _, n := range listed {
-		n = strings.TrimRight(n, ".")
-		if !numberToken.MatchString(n) {
-			break // the rest is prose ("електрозахранени от ТП 314")
-		}
 		if strings.EqualFold(n, number) {
 			return affected
 		}
 	}
 	switch {
-	case len(listed) > 0 && numberToken.MatchString(strings.TrimRight(listed[0], ".")):
+	case len(listed) > 0:
 		return notAffected // numbers are listed and this one is not among them
-	case m[1] != "":
+	case part:
 		return possibly
 	}
 	return affected

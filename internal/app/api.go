@@ -88,7 +88,7 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics ht
 		json.NewEncoder(w).Encode(b)
 	})
 	mux.HandleFunc("GET /api/check", addressCheck(pool, clk))
-	mux.HandleFunc("GET /api/regions/{id}/outages",func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/regions/{id}/outages", func(w http.ResponseWriter, r *http.Request) {
 		body, err := regionOutages(r, pool, clk)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -109,16 +109,18 @@ var sofia = func() *time.Location {
 }()
 
 type outageJSON struct {
-	ID             int64    `json:"id"`
-	Provider       string   `json:"provider"`
-	Utility        string   `json:"utility"`
-	Kind           string   `json:"kind"`
-	Severity       string   `json:"severity"`
-	Start          string   `json:"start"`
-	End            string   `json:"end"`
-	EndApproximate bool     `json:"end_approximate"`
-	Places         []string `json:"places"`
-	Notice         string   `json:"notice"` // the Provider's original text, never translated
+	ID             int64     `json:"id"`
+	Provider       string    `json:"provider"`
+	Utility        string    `json:"utility"`
+	Kind           string    `json:"kind"`
+	Severity       string    `json:"severity"`
+	Start          string    `json:"start"`
+	End            string    `json:"end"`
+	EndApproximate bool      `json:"end_approximate"`
+	Places         []string  `json:"places"`
+	Notice         string    `json:"notice"`         // the Provider's original text, never translated
+	Area           []feature `json:"area,omitempty"` // GeoJSON features with a confidence property
+	Unlocated      bool      `json:"unlocated,omitempty"`
 }
 
 type settlementJSON struct {
@@ -154,6 +156,9 @@ func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte
 			return nil, err
 		}
 		start, end = start.In(sofia), end.In(sofia)
+		if o.Area = outageArea(r.Context(), pool, settlement, o.Places); len(o.Area) == 0 {
+			o.Unlocated = true
+		}
 		o.Start, o.End = start.Format(time.RFC3339), end.Format(time.RFC3339)
 		if en {
 			settlement = latin(settlement)

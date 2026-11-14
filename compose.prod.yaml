@@ -1,0 +1,49 @@
+# Production stack: docker compose --env-file .env -f compose.prod.yaml up -d --build
+# Secrets come from .env (written by deploy/wizard.sh, never committed).
+x-app-env: &appenv
+  DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/outage?sslmode=disable
+  ROLE: all
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: outage-radar-postgres # deploy/backup.sh execs into it
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: outage
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d outage"]
+      interval: 5s
+      retries: 30
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment: *appenv
+    depends_on: { postgres: { condition: service_healthy } }
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment: *appenv
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
+  frontend:
+    build: ./web
+    restart: unless-stopped
+    depends_on: [app]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates: keep across restarts to avoid rate limits
+    depends_on: [frontend]
+
+volumes:
+  pgdata:
+  caddy_data:

@@ -38,7 +38,7 @@ func post(t *testing.T, url string, body any) (int, string) {
 }
 
 func signup(t *testing.T, s *testkit.System, email, lang string, addrs ...addr) (int, string) {
-	return post(t, s.URL+"/api/subscriptions", map[string]any{"email": email, "language": lang, "addresses": addrs})
+	return post(t, s.URL+"/api/subscriptions", map[string]any{"email": email, "language": lang, "addresses": addrs, "turnstile_token": testkit.ValidTurnstileToken})
 }
 
 type mailMsg struct{ To, Subject, Body string }

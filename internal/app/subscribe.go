@@ -18,6 +18,7 @@ import (
 	"net/smtp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/alisa/outage-radar/internal/clock"
@@ -39,6 +40,9 @@ type subscriptions struct {
 	kp   KeyProvider
 	clk  clock.Clock
 	cfg  Config
+
+	trips   atomic.Int64 // circuit-breaker trips
+	tripped atomic.Bool
 }
 
 type verifyEmailPayload struct{ To, Language, Token string }
@@ -60,6 +64,7 @@ type watchedAddress struct {
 // the email is already known.
 func (s *subscriptions) subscribe(w http.ResponseWriter, r *http.Request) {
 	var in struct {
+		Turnstile string `json:"turnstile_token"`
 		Email     string `json:"email"`
 		Language  string `json:"language"`
 		Addresses []struct {
@@ -77,8 +82,13 @@ func (s *subscriptions) subscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid subscription", http.StatusBadRequest)
 		return
 	}
+	if !s.turnstileOK(r, in.Turnstile) {
+		http.Error(w, "captcha failed", http.StatusBadRequest)
+		return
+	}
 	email := strings.ToLower(strings.TrimSpace(a.Address))
 	var wa [][]byte
+	var addrKeys []string
 	for _, ad := range in.Addresses {
 		b, err := lookupNumber(r.Context(), s.pool, strconv.Itoa(ad.StreetID), ad.Number)
 		if errors.Is(err, errNotFound) {
@@ -95,6 +105,10 @@ func (s *subscriptions) subscribe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		wa = append(wa, enc)
+		addrKeys = append(addrKeys, fmt.Sprintf("%d:%s", ad.StreetID, b.Number))
+	}
+	if !s.limitSignup(w, r, email, addrKeys) {
+		return
 	}
 	if err := s.create(r.Context(), email, in.Language, wa); err != nil {
 		slog.Error("signup failed", "err_kind", fmt.Sprintf("%T", err))
@@ -166,6 +180,9 @@ func (s *subscriptions) create(ctx context.Context, email, lang string, wa [][]b
 
 // verify consumes a magic link, verifying the Contact Channel and recording consent.
 func (s *subscriptions) verify(w http.ResponseWriter, r *http.Request) {
+	if !s.limitVerify(w, r) {
+		return
+	}
 	var in struct {
 		Token   string `json:"token"`
 		Consent bool   `json:"consent"`
@@ -254,4 +271,5 @@ func purgeUnverified(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock) {
 	if err != nil && ctx.Err() == nil {
 		slog.Error("purge unverified failed")
 	}
+	purgeRateHits(ctx, pool, clk.Now())
 }

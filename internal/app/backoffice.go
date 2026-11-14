@@ -45,19 +45,15 @@ func (b *backoffice) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /backoffice/api/providers/health", b.handle(roleOperator, "view_provider_health", b.providerHealth))
 	mux.HandleFunc("GET /backoffice/api/stats", b.handle(roleOperator, "view_stats", b.stats))
 	mux.HandleFunc("GET /backoffice/api/audit", b.handle(rolePrivacy, "view_audit_log", b.audit))
+	b.privacyRoutes(mux)
 }
 
 // handle authenticates, checks 2FA and role, runs fn and records the action before answering.
 // Every response is built from aggregates or operational data: nothing here returns decrypted personal data.
 func (b *backoffice) handle(role, action string, fn func(context.Context) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, err := b.authenticate(r)
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if !p.mfa || !slices.Contains(p.roles, role) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+		p, ok := b.guard(w, r, role)
+		if !ok {
 			return
 		}
 		out, err := fn(r.Context())
@@ -71,6 +67,20 @@ func (b *backoffice) handle(role, action string, fn func(context.Context) (any, 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
 	}
+}
+
+// guard authenticates, checks 2FA and role, and writes the refusal itself when it fails.
+func (b *backoffice) guard(w http.ResponseWriter, r *http.Request, role string) (principal, bool) {
+	p, err := b.authenticate(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return p, false
+	}
+	if !p.mfa || !slices.Contains(p.roles, role) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return p, false
+	}
+	return p, true
 }
 
 type principal struct {
@@ -291,7 +301,7 @@ func (b *backoffice) stats(ctx context.Context) (any, error) {
 }
 
 func (b *backoffice) audit(ctx context.Context) (any, error) {
-	rows, err := b.pool.Query(ctx, `SELECT at, actor, action FROM audit_log ORDER BY id`)
+	rows, err := b.pool.Query(ctx, `SELECT at, actor, action, reason FROM audit_log ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -299,11 +309,11 @@ func (b *backoffice) audit(ctx context.Context) (any, error) {
 	out := []map[string]any{}
 	for rows.Next() {
 		var at time.Time
-		var actor, action string
-		if err := rows.Scan(&at, &actor, &action); err != nil {
+		var actor, action, reason string
+		if err := rows.Scan(&at, &actor, &action, &reason); err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"at": at.In(sofia).Format(time.RFC3339), "actor": actor, "action": action})
+		out = append(out, map[string]any{"at": at.In(sofia).Format(time.RFC3339), "actor": actor, "action": action, "reason": reason})
 	}
 	return out, rows.Err()
 }

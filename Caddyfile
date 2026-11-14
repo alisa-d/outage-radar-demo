@@ -1,0 +1,4 @@
+# Caddy obtains and renews the Let's Encrypt certificate and redirects HTTP to HTTPS on its own.
+outage-radar.alisa-d.dev {
+	reverse_proxy frontend:80
+}

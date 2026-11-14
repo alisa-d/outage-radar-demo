@@ -1,5 +1,7 @@
 <script>
   import { onMount } from 'svelte';
+  import AddressPicker from '$lib/AddressPicker.svelte';
+  let confirmed = $state(null);
 
   const t = {
     bg: { title: 'Аварии във вашия район', pick: 'Изберете област', loading: 'Зареждане…', error: 'Грешка при зареждане', settlements: 'Населени места', providers: 'Доставчици', water: 'вода', power: 'ток', cut: 'Прекъсване', disturbance: 'Възможни смущения', planned: 'планирано', emergency: 'аварийно', approx: '~', original: 'Оригинално съобщение', none: 'Няма планирани прекъсвания за следващите 7 дни.', whole: 'цялото населено място' },
@@ -59,6 +61,8 @@
     {#if region}
       <h2>{L.settlements}</h2>
       <ul>{#each region.settlements as s}<li>{s.name}</li>{/each}</ul>
+      <AddressPicker settlements={region.settlements} {lang} onconfirm={(a) => (confirmed = a)} />
+      {#if confirmed}<p data-testid="confirmed">{JSON.stringify(confirmed)}</p>{/if}
       <h2>{L.providers}</h2>
       <ul>{#each region.providers as p}<li>{p.name} ({L[p.utility]})</li>{/each}</ul>
       {#if days && days.length === 0}<p>{L.none}</p>{/if}

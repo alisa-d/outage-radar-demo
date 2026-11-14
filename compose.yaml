@@ -13,6 +13,8 @@ services:
     environment: &appenv
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/outage?sslmode=disable
       ROLE: all
+      DATA_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # dev only, never reuse
+      SMTP_ADDR: mailpit:1025
     depends_on: { postgres: { condition: service_healthy } }
 
   app:

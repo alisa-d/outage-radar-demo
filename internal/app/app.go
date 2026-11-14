@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -30,6 +31,12 @@ type Config struct {
 	DatabaseURL string
 	HTTPAddr    string
 	ErpSeverURL string // base URL of the ЕРП Север site
+	DataKey     string // base64 32-byte key-encryption key (env key provider)
+	SMTPAddr    string
+	SMTPUser    string
+	SMTPPass    string
+	MailFrom    string
+	PublicURL   string // base of links in emails
 }
 
 func ConfigFromEnv() Config {
@@ -39,7 +46,10 @@ func ConfigFromEnv() Config {
 		}
 		return def
 	}
-	return Config{Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"), ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg")}
+	return Config{Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"),
+		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
+		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
+		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg")}
 }
 
 // Handler processes one job; returning an error retries it with backoff.
@@ -125,10 +135,20 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 	if clk == nil {
 		clk = clock.System()
 	}
+	kp, err := NewEnvKeyProvider(cfg.DataKey)
+	if err != nil {
+		return nil, err
+	}
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
+	subs := &subscriptions{pool, kp, clk, cfg}
+	handlers = maps.Clone(handlers)
+	if handlers == nil {
+		handlers = map[string]Handler{}
+	}
+	handlers[verifyEmailJob] = func(ctx context.Context, p []byte) error { return subs.sendVerifyEmail(ctx, p) }
 	a := &App{pool: pool}
 	if serveAPI {
 		l, err := net.Listen("tcp", cfg.HTTPAddr)
@@ -137,7 +157,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, clk)}
+		srv := &http.Server{Handler: newMux(pool, subs, clk)}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()
@@ -169,11 +189,16 @@ func work(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock, handlers map
 	for k := range handlers {
 		kinds = append(kinds, k)
 	}
+	var lastPurge time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(100 * time.Millisecond):
+		}
+		if now := clk.Now(); now.Sub(lastPurge) >= time.Minute {
+			lastPurge = now
+			purgeUnverified(ctx, pool, clk)
 		}
 		for runOne(ctx, pool, clk, kinds, handlers) {
 		}

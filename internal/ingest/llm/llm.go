@@ -21,7 +21,7 @@ import (
 )
 
 // shortcut: model ID not checked against the live API (never called outside tests); verify before deploying.
-const model = "claude-haiku-5-5"
+const Model = "claude-haiku-5-5"
 
 const system = `You extract water or power outages from one Bulgarian utility Notice. ` +
 	`Call record_outages with one entry per interruption (per time window). ` +
@@ -72,7 +72,7 @@ func (e *Extractor) Extract(n ingest.Notice) ([]ingest.Outage, error) {
 		if body, err = e.ask(ctx, n.Text); err != nil {
 			return nil, err
 		}
-		if _, err = resolve(body, n.Published); err != nil { // never cache invalid output
+		if _, err = Resolve(body, n.Published); err != nil { // never cache invalid output
 			return nil, err
 		}
 		_, err = e.pool.Exec(ctx, `INSERT INTO llm_extractions (text_hash, result) VALUES ($1, $2) ON CONFLICT DO NOTHING`, hash, body)
@@ -80,28 +80,37 @@ func (e *Extractor) Extract(n ingest.Notice) ([]ingest.Outage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return resolve(body, n.Published)
+	return Resolve(body, n.Published)
 }
 
 func (e *Extractor) ask(ctx context.Context, text string) ([]byte, error) {
+	b, _, err := Ask(ctx, e.client, e.baseURL, e.apiKey, Model, text)
+	return b, err
+}
+
+// Usage is the token count the API reports for one request.
+type Usage struct{ InputTokens, OutputTokens int }
+
+// Ask sends one Notice's text to the Claude API and returns the raw tool input.
+func Ask(ctx context.Context, client *http.Client, baseURL, apiKey, model, text string) ([]byte, Usage, error) {
 	req, _ := json.Marshal(map[string]any{
 		"model": model, "max_tokens": 2048, "system": system,
 		"tools":       []any{map[string]any{"name": "record_outages", "description": "Record the outages in the Notice.", "input_schema": schema}},
 		"tool_choice": map[string]any{"type": "tool", "name": "record_outages"},
 		"messages":    []any{map[string]any{"role": "user", "content": text}}, // Notice text only
 	})
-	r, _ := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/v1/messages", bytes.NewReader(req))
-	r.Header.Set("x-api-key", e.apiKey)
+	r, _ := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/messages", bytes.NewReader(req))
+	r.Header.Set("x-api-key", apiKey)
 	r.Header.Set("anthropic-version", "2023-06-01")
 	r.Header.Set("content-type", "application/json")
-	resp, err := e.client.Do(r)
+	resp, err := client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, Usage{}, err
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("claude: status %d", resp.StatusCode)
+		return nil, Usage{}, fmt.Errorf("claude: status %d", resp.StatusCode)
 	}
 	var out struct {
 		Content []struct {
@@ -109,16 +118,20 @@ func (e *Extractor) ask(ctx context.Context, text string) ([]byte, error) {
 			Name  string          `json:"name"`
 			Input json.RawMessage `json:"input"`
 		} `json:"content"`
+		Usage struct {
+			In  int `json:"input_tokens"`
+			Out int `json:"output_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, fmt.Errorf("claude: %w", err)
+		return nil, Usage{}, fmt.Errorf("claude: %w", err)
 	}
 	for _, c := range out.Content {
 		if c.Type == "tool_use" && c.Name == "record_outages" {
-			return c.Input, nil
+			return c.Input, Usage{out.Usage.In, out.Usage.Out}, nil
 		}
 	}
-	return nil, fmt.Errorf("claude: no record_outages call")
+	return nil, Usage{}, fmt.Errorf("claude: no record_outages call")
 }
 
 var sofia = func() *time.Location {
@@ -129,9 +142,9 @@ var sofia = func() *time.Location {
 	return l
 }()
 
-// resolve validates the model's output and turns it into Outages in Europe/Sofia;
+// Resolve validates the model's output and turns it into Outages in Europe/Sofia;
 // a missing date is the Notice's publication date.
-func resolve(body []byte, published time.Time) ([]ingest.Outage, error) {
+func Resolve(body []byte, published time.Time) ([]ingest.Outage, error) {
 	var r raw
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()

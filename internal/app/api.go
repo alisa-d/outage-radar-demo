@@ -25,9 +25,10 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics ht
 	// shortcut: served on the public listener (the frontend proxy only forwards /api); only roles with HTTP export metrics.
 	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
 	mux.HandleFunc("POST /api/verify", subs.verify)
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); metrics.ServeHTTP(w, r) })
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); subs.deliveryMetrics(w, r); metrics.ServeHTTP(w, r) })
 	subs.routes(mux)
 	mux.HandleFunc("POST /api/unsubscribe", subs.unsubscribe)
+	mux.HandleFunc("POST /api/webhooks/brevo", subs.brevoWebhook)
 	bo.routes(mux)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte

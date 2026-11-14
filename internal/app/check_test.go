@@ -60,6 +60,10 @@ func fixtureFeed(t *testing.T, typ string) []byte {
 // serveFeed replays feed(type), or 500 while down is set.
 func serveFeed(s *testkit.System, down *atomic.Bool, feed func(typ string) []byte) {
 	s.StubProviders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bg/profil/xhr/" { // other Providers share the stub server
+			http.NotFound(w, r)
+			return
+		}
 		if down.Load() {
 			http.Error(w, "boom", 500)
 			return

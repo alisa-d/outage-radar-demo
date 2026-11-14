@@ -1,6 +1,5 @@
 # 06: Provider Health, status strip, Coverage
 
-Status: resolved
 
 **What to build:** Residents can always tell whether the data can be trusted. Each Provider's health is tracked:
 
@@ -11,7 +10,7 @@ The Region page shows a status strip per Utility ("Water: data from ВиК Ва�
 
 **Blocked by:** 03 (Power Outages from ЕРП Север)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 

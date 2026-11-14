@@ -88,7 +88,7 @@ func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics ht
 		json.NewEncoder(w).Encode(b)
 	})
 	mux.HandleFunc("GET /api/check", addressCheck(pool, clk))
-	mux.HandleFunc("GET /api/regions/{id}/outages",func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/regions/{id}/outages", func(w http.ResponseWriter, r *http.Request) {
 		body, err := regionOutages(r, pool, clk)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -119,6 +119,7 @@ type outageJSON struct {
 	EndApproximate bool     `json:"end_approximate"`
 	Places         []string `json:"places"`
 	Notice         string   `json:"notice"` // the Provider's original text, never translated
+	Unlocated      bool     `json:"unlocated"`
 }
 
 type settlementJSON struct {
@@ -145,12 +146,23 @@ func regionOutages(r *http.Request, pool *pgxpool.Pool, clk clock.Clock) ([]byte
 		return nil, err
 	}
 	defer rows.Close()
+	resolvers := map[string]*resolver{}
 	byDay := map[string]map[string][]outageJSON{}
 	for rows.Next() {
 		var o outageJSON
 		var start, end time.Time
 		var settlement string
 		if err := rows.Scan(&o.ID, &o.Provider, &o.Utility, &o.Kind, &o.Severity, &start, &end, &o.EndApproximate, &settlement, &o.Places, &o.Notice); err != nil {
+			return nil, err
+		}
+		rs, ok := resolvers[settlement]
+		if !ok {
+			if rs, err = loadResolver(r.Context(), pool, settlement); err != nil {
+				return nil, err
+			}
+			resolvers[settlement] = rs
+		}
+		if _, o.Unlocated, err = matchOutage(rs, settlement, o.Places, nil); err != nil {
 			return nil, err
 		}
 		start, end = start.In(sofia), end.In(sofia)

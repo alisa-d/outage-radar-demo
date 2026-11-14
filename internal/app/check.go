@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/alisa/outage-radar/internal/clock"
@@ -22,69 +20,14 @@ const (
 	noData      = "no_data"
 )
 
-var (
-	streetPlace = regexp.MustCompile(`^(част от )?(?:ул|бул|пл)\.\s*(.+)$`)
-	numberToken = regexp.MustCompile(`^\d+[\p{L}]?$`)
-)
-
-// matchPlace is Seam 3 for one place description of an Outage in the Address's Settlement.
-// shortcut: only "ул./бул./пл. Name [numbers]" and "част от ул. Name" are resolved; quarters,
-// landmarks, transformer stations and prose are Not affected here until ticket 08 adds the Gazetteer.
-func matchPlace(place, street, number string) string {
-	m := streetPlace.FindStringSubmatch(strings.TrimSpace(place))
-	if m == nil {
-		return notAffected
-	}
-	toks := strings.Fields(m[2])
-	name := []string{strings.Trim(toks[0], ",.")}
-	i := 1
-	for ; i < len(toks) && !numberToken.MatchString(strings.Trim(toks[i], ",.")); i++ {
-		name = append(name, strings.Trim(toks[i], ",."))
-	}
-	if normalize(strings.Join(name, " ")) != normalize(street) {
-		return notAffected
-	}
-	listed := strings.FieldsFunc(strings.Join(toks[i:], " "), func(r rune) bool { return r == ',' || r == ' ' })
-	for _, n := range listed {
-		n = strings.TrimRight(n, ".")
-		if !numberToken.MatchString(n) {
-			break // the rest is prose ("електрозахранени от ТП 314")
-		}
-		if strings.EqualFold(n, number) {
-			return affected
-		}
-	}
-	switch {
-	case len(listed) > 0 && numberToken.MatchString(strings.TrimRight(listed[0], ".")):
-		return notAffected // numbers are listed and this one is not among them
-	case m[1] != "":
-		return possibly
-	}
-	return affected
-}
-
-func matchOutage(settlement string, places []string, addrSettlement, street, number string) string {
-	if !strings.EqualFold(strings.TrimSpace(settlement), addrSettlement) {
-		return notAffected
-	}
-	best := notAffected
-	for _, p := range places {
-		switch matchPlace(p, street, number) {
-		case affected:
-			return affected
-		case possibly:
-			best = possibly
-		}
-	}
-	return best
-}
-
 type utilityCheck struct {
 	Utility  string       `json:"utility"`
 	Provider string       `json:"provider"`
 	Coverage string       `json:"coverage"`
 	Result   string       `json:"result"`
 	Outages  []outageJSON `json:"outages"`
+	// Unlocated lists the Settlement's Unlocated Outages: shown, never a Match Result (ADR 0003).
+	Unlocated []outageJSON `json:"unlocated"`
 }
 
 // addressCheck answers "is this Address affected?" per Utility. It only reads: an anonymous
@@ -111,6 +54,12 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 			fail(err)
 			return
 		}
+		rs, err := loadResolver(r.Context(), pool, settlement)
+		if err != nil {
+			fail(err)
+			return
+		}
+		at := &target{street: street, number: b.Number, pt: [2]float64{b.Lon, b.Lat}}
 		now := clk.Now()
 		hs, err := ingest.Healths(r.Context(), pool, now)
 		if err != nil {
@@ -143,7 +92,7 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 		to := time.Date(sofiaNow.Year(), sofiaNow.Month(), sofiaNow.Day(), 0, 0, 0, 0, sofia).AddDate(0, 0, 8)
 		out := []utilityCheck{}
 		for _, p := range provs {
-			u := utilityCheck{Utility: p.utility, Provider: p.name, Coverage: p.coverage, Result: noData, Outages: []outageJSON{}}
+			u := utilityCheck{Utility: p.utility, Provider: p.name, Coverage: p.coverage, Result: noData, Outages: []outageJSON{}, Unlocated: []outageJSON{}}
 			// Only a Healthy Provider can say "not affected"; otherwise silence means nothing.
 			if hs[p.name].State == "healthy" {
 				u.Result = notAffected
@@ -164,8 +113,13 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 						fail(err)
 						return
 					}
-					m := matchOutage(os, o.Places, settlement, street, b.Number)
-					if m == notAffected {
+					m, unlocated, err := matchOutage(rs, os, o.Places, at)
+					if err != nil {
+						rows.Close()
+						fail(err)
+						return
+					}
+					if m == notAffected && !unlocated {
 						continue
 					}
 					o.Start, o.End = start.In(sofia).Format(time.RFC3339), end.In(sofia).Format(time.RFC3339)
@@ -173,6 +127,10 @@ func addressCheck(pool *pgxpool.Pool, clk clock.Clock) http.HandlerFunc {
 						for i, pl := range o.Places {
 							o.Places[i] = latin(pl)
 						}
+					}
+					if unlocated {
+						u.Unlocated = append(u.Unlocated, o)
+						continue
 					}
 					u.Outages = append(u.Outages, o)
 					if m == affected || u.Result == notAffected {

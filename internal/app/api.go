@@ -23,10 +23,9 @@ SELECT coalesce(json_agg(json_build_object(
 func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	// shortcut: served on the public listener (the frontend proxy only forwards /api); only roles with HTTP export metrics.
-	mux.Handle("GET /metrics", metrics)
 	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
 	mux.HandleFunc("POST /api/verify", subs.verify)
-	mux.HandleFunc("GET /metrics", subs.metrics)
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); metrics.ServeHTTP(w, r) })
 	subs.routes(mux)
 	mux.HandleFunc("GET /api/regions", func(w http.ResponseWriter, r *http.Request) {
 		var body []byte

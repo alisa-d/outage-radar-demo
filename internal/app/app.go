@@ -190,7 +190,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))}
+		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{DisableCompression: true}))}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()

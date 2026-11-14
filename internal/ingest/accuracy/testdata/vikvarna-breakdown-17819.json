@@ -1,0 +1,25 @@
+{
+ "provider": "ВиК Варна",
+ "notice": {
+  "external_id": "breakdown/17819",
+  "published": "2026-11-11T00:00:00+02:00",
+  "text": "От 10.30ч. до около 16ч. части от к.к. Чайка и местност Ален Мак.",
+  "fields": {
+   "kind": "emergency"
+  }
+ },
+ "expected": [
+  {
+   "start": "2026-11-11T10:30:00+02:00",
+   "end": "2026-11-11T16:00:00+02:00",
+   "end_approximate": true,
+   "severity": "cut",
+   "kind": "emergency",
+   "settlement": "Варна",
+   "places": [
+    "части от к.к. Чайка",
+    "местност Ален Мак"
+   ]
+  }
+ ]
+}

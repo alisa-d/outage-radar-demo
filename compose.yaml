@@ -15,6 +15,7 @@ services:
       ROLE: all
       DATA_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # dev only, never reuse
       SMTP_ADDR: mailpit:1025
+      PUBLIC_URL: http://localhost:${FRONTEND_PORT:-8081}
       TURNSTILE_SECRET: 1x0000000000000000000000000000000AA # Cloudflare test secret (always passes); real one by env in prod
       OIDC_ISSUER: http://keycloak:8080/realms/outage
     depends_on: { postgres: { condition: service_healthy } }
@@ -34,9 +35,9 @@ services:
 
   frontend:
     build: ./web
-    ports: ["8081:80"]
+    ports: ["${FRONTEND_PORT:-8081}:80"]
     depends_on: [app]
 
   mailpit:
     image: axllent/mailpit
-    ports: ["8025:8025"]
+    ports: ["${MAILPIT_PORT:-8025}:8025"]

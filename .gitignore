@@ -13,3 +13,5 @@ go.work.sum
 node_modules/
 web/build/
 web/.svelte-kit/
+e2e/node_modules/
+e2e/test-results/

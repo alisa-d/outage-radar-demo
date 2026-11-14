@@ -19,6 +19,8 @@ import (
 	"github.com/alisa/outage-radar/internal/clock"
 	"github.com/alisa/outage-radar/internal/ingest"
 	"github.com/alisa/outage-radar/internal/ingest/erpsever"
+	"github.com/alisa/outage-radar/internal/ingest/llm"
+	"github.com/alisa/outage-radar/internal/ingest/vikvarna"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,12 +38,16 @@ type Config struct {
 	DatabaseURL string
 	HTTPAddr    string
 	ErpSeverURL string // base URL of the ЕРП Север site
-	DataKey     string // base64 32-byte key-encryption key (env key provider)
-	SMTPAddr    string
-	SMTPUser    string
-	SMTPPass    string
-	MailFrom    string
-	PublicURL   string // base of links in emails
+	VikVarnaURL string // base URL of the ВиК Варна site
+
+	AnthropicURL string // base URL of the Claude API
+	AnthropicKey string
+	DataKey      string // base64 32-byte key-encryption key (env key provider)
+	SMTPAddr     string
+	SMTPUser     string
+	SMTPPass     string
+	MailFrom     string
+	PublicURL    string // base of links in emails
 
 	TurnstileSecret  string
 	TurnstileURL     string // siteverify endpoint
@@ -71,7 +77,8 @@ func ConfigFromEnv() Config {
 		Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"),
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
 		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
-		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg")}
+		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg"),
+		VikVarnaURL: get("VIKVARNA_BASE_URL", "https://vikvarna.com"), AnthropicURL: get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"), AnthropicKey: os.Getenv("ANTHROPIC_API_KEY")}
 }
 
 // Handler processes one job; returning an error retries it with backoff.
@@ -209,7 +216,8 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 		go func() { defer a.wg.Done(); work(ctx, pool, clk, handlers) }()
 		if cfg.Role != "notify" {
 			// Registering a Provider is adding its adapter here.
-			adapters := []ingest.Adapter{erpsever.New(cfg.ErpSeverURL)}
+			adapters := []ingest.Adapter{erpsever.New(cfg.ErpSeverURL),
+				vikvarna.New(cfg.VikVarnaURL, llm.New(pool, cfg.AnthropicURL, cfg.AnthropicKey))}
 			a.wg.Add(1)
 			go func() { defer a.wg.Done(); ingest.Run(ctx, pool, clk, metrics, adapters) }()
 		}

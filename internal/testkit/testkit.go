@@ -73,7 +73,11 @@ type System struct {
 	SMTP      *SMTPSink
 	App       *app.App
 	stub      atomic.Pointer[http.Handler]
+	claude    atomic.Pointer[http.Handler]
 }
+
+// StubClaude sets what the stub Claude API answers (404 until called).
+func (s *System) StubClaude(h http.Handler) { s.claude.Store(&h) }
 
 // Start migrates a fresh database and runs the app against it.
 func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
@@ -87,6 +91,17 @@ const ValidTurnstileToken = "valid-token"
 // StartWith is Start with a hook to adjust the Config (limits are generous by default).
 func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak func(*app.Config)) *System {
 	t.Helper()
+	return startAt(t, role, handlers, tweak, time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC))
+}
+
+// StartAt is Start with the fake clock set to now.
+func StartAt(t testing.TB, role string, handlers map[string]app.Handler, now time.Time) *System {
+	t.Helper()
+	return startAt(t, role, handlers, nil, now)
+}
+
+func startAt(t testing.TB, role string, handlers map[string]app.Handler, tweak func(*app.Config), now time.Time) *System {
+	t.Helper()
 	dsn := NewDatabase(t)
 	var s *System
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,10 +111,16 @@ func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak
 	}
 	s = &System{
 		DSN:       dsn,
-		Clock:     clock.NewFake(time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)),
+		Clock:     clock.NewFake(now),
 		Providers: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.providerHandler().ServeHTTP(w, r) })),
-		Claude:    httptest.NewServer(http.NotFoundHandler()),
-		SMTP:      newSMTPSink(t),
+		Claude: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if h := s.claude.Load(); h != nil {
+				(*h).ServeHTTP(w, r)
+				return
+			}
+			http.NotFound(w, r)
+		})),
+		SMTP: newSMTPSink(t),
 	}
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
@@ -109,7 +130,7 @@ func StartWith(t testing.TB, role string, handlers map[string]app.Handler, tweak
 	}))
 	t.Cleanup(ts.Close)
 	cfg := app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
-		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL,
+		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test", ErpSeverURL: s.Providers.URL, VikVarnaURL: s.Providers.URL, AnthropicURL: s.Claude.URL, AnthropicKey: "test-key",
 		TurnstileSecret: "test-secret", TurnstileURL: ts.URL,
 		IPLimit: 1000, ChannelLimit: 1000, AddressLimit: 1000, ChannelDailyCap: 1000, EmailDailyBudget: 1000}
 	if tweak != nil {

@@ -52,6 +52,10 @@ func waitState(t *testing.T, s *testkit.System, want string) health {
 // replay answers with the captured fixtures, or one of the failing modes.
 func replay(s *testkit.System, t *testing.T, mode *atomicString) {
 	s.StubProviders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bg/profil/xhr/" { // the ВиК Варна adapter shares this stub
+			http.NotFound(w, r)
+			return
+		}
 		typ := r.URL.Query().Get("type")
 		switch mode.Load() {
 		case "ok":

@@ -41,7 +41,7 @@ type subscriptions struct {
 	cfg  Config
 }
 
-type verifyEmailPayload struct{ To, Language, Token string }
+type verifyEmailPayload struct{ To, Language, Token, Kind string } // Kind "" = verify, "manage"
 
 func (s *subscriptions) sign(id string) string {
 	m := hmac.New(sha256.New, s.kp.Derive("magic-link"))
@@ -116,7 +116,7 @@ func (s *subscriptions) create(ctx context.Context, email, lang string, wa [][]b
 	rand.Read(idb)
 	linkID := hex.EncodeToString(idb)
 	tok := linkID + "." + s.sign(linkID)
-	payload, err := json.Marshal(verifyEmailPayload{email, lang, tok})
+	payload, err := json.Marshal(verifyEmailPayload{To: email, Language: lang, Token: tok})
 	if err != nil {
 		return err
 	}
@@ -198,8 +198,15 @@ func (s *subscriptions) consume(ctx context.Context, linkID string) error {
 	defer tx.Rollback(ctx)
 	now := s.clk.Now()
 	var sub int64
-	if err := tx.QueryRow(ctx, `UPDATE magic_links SET used_at = $2 WHERE id = $1 AND used_at IS NULL AND expires_at > $2 RETURNING subscriber_id`, linkID, now).Scan(&sub); err != nil {
+	var channel *int64
+	if err := tx.QueryRow(ctx, `UPDATE magic_links SET used_at = $2 WHERE id = $1 AND purpose = 'verify' AND used_at IS NULL AND expires_at > $2 RETURNING subscriber_id, channel_id`, linkID, now).Scan(&sub, &channel); err != nil {
 		return err
+	}
+	if channel != nil { // an added channel: consent was already recorded at first verification
+		if _, err := tx.Exec(ctx, `UPDATE contact_channels SET verified_at = $2 WHERE id = $1`, *channel, now); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE contact_channels SET verified_at = $2 WHERE subscriber_id = $1`, sub, now); err != nil {
 		return err
@@ -208,6 +215,11 @@ func (s *subscriptions) consume(ctx context.Context, linkID string) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+var manageMail = map[string]struct{ subject, body string }{
+	"en": {"Manage your Outage Radar subscription", "Open this link within one hour to manage, export or delete your data:\r\n\r\n%s\r\n\r\nIf you did not ask for this, ignore this message.\r\n"},
+	"bg": {"Управлявайте абонамента си за Outage Radar", "Отворете тази връзка до един час, за да управлявате, изтеглите или изтриете данните си:\r\n\r\n%s\r\n\r\nАко не сте го поискали, игнорирайте това съобщение.\r\n"},
 }
 
 var verifyMail = map[string]struct{ subject, body string }{
@@ -228,7 +240,13 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 	tpl := verifyMail[p.Language]
 	var body bytes.Buffer
 	qp := quotedprintable.NewWriter(&body)
-	fmt.Fprintf(qp, tpl.body, privacyNoticeVersion, strings.TrimRight(s.cfg.PublicURL, "/")+"/verify?token="+p.Token)
+	base := strings.TrimRight(s.cfg.PublicURL, "/")
+	if p.Kind == "manage" {
+		tpl = manageMail[p.Language]
+		fmt.Fprintf(qp, tpl.body, base+"/manage?token="+p.Token)
+	} else {
+		fmt.Fprintf(qp, tpl.body, privacyNoticeVersion, base+"/verify?token="+p.Token)
+	}
 	qp.Close()
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
 		s.cfg.MailFrom, p.To, mime.QEncoding.Encode("utf-8", tpl.subject), s.clk.Now().Format(time.RFC1123Z), body.String())
@@ -251,6 +269,9 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 func purgeUnverified(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock) {
 	_, err := pool.Exec(ctx, `DELETE FROM subscribers s WHERE created_at <= $1
 		AND NOT EXISTS (SELECT 1 FROM contact_channels c WHERE c.subscriber_id = s.id AND c.verified_at IS NOT NULL)`, clk.Now().Add(-unverifiedTTL))
+	if err == nil { // channels added through management and never verified
+		_, err = pool.Exec(ctx, `DELETE FROM contact_channels WHERE verified_at IS NULL AND created_at <= $1`, clk.Now().Add(-unverifiedTTL))
+	}
 	if err != nil && ctx.Err() == nil {
 		slog.Error("purge unverified failed")
 	}

@@ -252,6 +252,14 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 	if err := json.Unmarshal(plain, &p); err != nil {
 		return err
 	}
+	// A bounced or unsubscribed address gets no more mail, including one queued before it was disabled.
+	var disabled bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contact_channels WHERE blind_idx = $1 AND disabled_at IS NOT NULL)`, blindIndex(s.kp, p.To)).Scan(&disabled); err != nil {
+		return err
+	}
+	if disabled {
+		return nil
+	}
 	tpl := verifyMail[p.Language]
 	var body bytes.Buffer
 	qp := quotedprintable.NewWriter(&body)

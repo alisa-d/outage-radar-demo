@@ -128,7 +128,7 @@ func (s *subscriptions) requestManageLink(w http.ResponseWriter, r *http.Request
 		var sub int64
 		var lang string
 		err = tx.QueryRow(r.Context(), `SELECT s.id, s.language FROM contact_channels c JOIN subscribers s ON s.id = c.subscriber_id
-			WHERE c.blind_idx = $1 AND c.verified_at IS NOT NULL`, blindIndex(s.kp, email)).Scan(&sub, &lang)
+			WHERE c.blind_idx = $1 AND c.verified_at IS NOT NULL AND c.disabled_at IS NULL`, blindIndex(s.kp, email)).Scan(&sub, &lang)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		} else if err != nil {

@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: outage }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d outage"]
+      interval: 2s
+      retries: 30
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment: &appenv
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/outage?sslmode=disable
+      ROLE: all
+    depends_on: { postgres: { condition: service_healthy } }
+
+  app:
+    build: .
+    environment: *appenv
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
+  frontend:
+    build: ./web
+    ports: ["8081:80"]
+    depends_on: [app]
+
+  mailpit:
+    image: axllent/mailpit
+    ports: ["8025:8025"]

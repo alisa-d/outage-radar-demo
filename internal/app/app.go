@@ -26,6 +26,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
@@ -37,6 +39,7 @@ type Config struct {
 	Role        string // api | ingest | notify | all
 	DatabaseURL string
 	HTTPAddr    string
+	MetricsAddr string // every role serves /metrics here, never on the public listener
 	ErpSeverURL string // base URL of the ЕРП Север site
 	VikVarnaURL string // base URL of the ВиК Варна site
 
@@ -80,7 +83,7 @@ func ConfigFromEnv() Config {
 		IPLimit: num("LIMIT_IP", 20), ChannelLimit: num("LIMIT_CHANNEL", 3), AddressLimit: num("LIMIT_ADDRESS", 30),
 		ChannelDailyCap: num("CAP_CHANNEL_DAILY", 5), EmailDailyBudget: num("BUDGET_EMAIL_DAILY", 100000),
 		OIDCIssuer: os.Getenv("OIDC_ISSUER"), OIDCClientID: get("OIDC_CLIENT_ID", "backoffice"),
-		Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"),
+		Role: get("ROLE", "all"), DatabaseURL: os.Getenv("DATABASE_URL"), HTTPAddr: get("HTTP_ADDR", ":8080"), MetricsAddr: get("METRICS_ADDR", ":9100"),
 		DataKey: os.Getenv("DATA_KEY"), SMTPAddr: get("SMTP_ADDR", "localhost:1025"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASS"),
 		MailFrom: get("MAIL_FROM", "alerts@outage-radar.alisa-d.dev"), PublicURL: get("PUBLIC_URL", "http://localhost:8081"),
 		ErpSeverURL: get("ERPSEVER_BASE_URL", "https://www.erpsever.bg"),
@@ -143,13 +146,16 @@ func Enqueue(ctx context.Context, tx pgx.Tx, kind string, payload []byte) error 
 }
 
 type App struct {
-	addr string
-	wg   sync.WaitGroup
-	pool *pgxpool.Pool
+	addr, metricsAddr string
+	wg                sync.WaitGroup
+	pool              *pgxpool.Pool
 }
 
 // Addr is the HTTP listen address, empty when the role does not serve HTTP.
 func (a *App) Addr() string { return a.addr }
+
+// MetricsAddr is where /metrics is served (every role).
+func (a *App) MetricsAddr() string { return a.metricsAddr }
 
 // Wait blocks until everything started has stopped (after ctx is cancelled).
 func (a *App) Wait() { a.wg.Wait(); a.pool.Close() }
@@ -187,17 +193,34 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 	handlers[scanAlertsJob] = func(ctx context.Context, p []byte) error { return subs.scanAlerts(ctx, p) }
 	handlers[sendAlertJob] = func(ctx context.Context, p []byte) error { return subs.sendAlert(ctx, p) }
 	reg := prometheus.NewRegistry()
-	exp, err := otelprom.New(otelprom.WithRegisterer(reg))
+	exp, err := otelprom.New(otelprom.WithRegisterer(reg), otelprom.WithoutScopeInfo(), otelprom.WithoutTargetInfo())
 	if err != nil {
 		pool.Close()
 		return nil, err
 	}
-	metrics, err := ingest.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp)).Meter("outage-radar"), pool, clk)
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp)).Meter("outage-radar")
+	metrics, err := ingest.NewMetrics(meter, pool, clk)
+	if err == nil {
+		subs.trips, err = meter.Int64Counter("circuit_breaker_trips", metric.WithDescription("Signup circuit-breaker trips"))
+	}
+	if err == nil {
+		subs.trips.Add(ctx, 0, metric.WithAttributes(attribute.String("channel", "email"))) // export 0 so the first trip is an increase
+		err = subs.registerDeliveryMetrics(meter)
+	}
 	if err != nil {
 		pool.Close()
 		return nil, err
 	}
-	a := &App{pool: pool}
+	ml, err := net.Listen("tcp", cfg.MetricsAddr)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	a := &App{pool: pool, metricsAddr: ml.Addr().String()}
+	msrv := &http.Server{Handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{DisableCompression: true})}
+	a.wg.Add(2)
+	go func() { defer a.wg.Done(); msrv.Serve(ml) }()
+	go func() { defer a.wg.Done(); <-ctx.Done(); msrv.Close() }()
 	if serveAPI {
 		l, err := net.Listen("tcp", cfg.HTTPAddr)
 		if err != nil {
@@ -205,7 +228,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{DisableCompression: true}), &backoffice{pool: pool, subs: subs, clk: clk, cfg: cfg})}
+		srv := &http.Server{Handler: newMux(pool, subs, clk, &backoffice{pool: pool, subs: subs, clk: clk, cfg: cfg})}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()

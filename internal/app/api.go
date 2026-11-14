@@ -20,12 +20,10 @@ SELECT coalesce(json_agg(json_build_object(
   'providers',   (SELECT coalesce(json_agg(json_build_object('name', p.name, 'utility', p.utility, 'coverage', p.coverage) ORDER BY p.id), '[]') FROM providers p WHERE p.region_id = r.id)
 ) ORDER BY r.id), '[]') FROM regions r`
 
-func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, metrics http.Handler, bo *backoffice) http.Handler {
+func newMux(pool *pgxpool.Pool, subs *subscriptions, clk clock.Clock, bo *backoffice) http.Handler {
 	mux := http.NewServeMux()
-	// shortcut: served on the public listener (the frontend proxy only forwards /api); only roles with HTTP export metrics.
 	mux.HandleFunc("POST /api/subscriptions", subs.subscribe)
 	mux.HandleFunc("POST /api/verify", subs.verify)
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { subs.metrics(w, r); subs.deliveryMetrics(w, r); metrics.ServeHTTP(w, r) })
 	subs.routes(mux)
 	mux.HandleFunc("POST /api/unsubscribe", subs.unsubscribe)
 	mux.HandleFunc("POST /api/webhooks/brevo", subs.brevoWebhook)

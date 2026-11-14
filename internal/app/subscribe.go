@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/metric"
 	"log/slog"
 	"mime"
 	"mime/quotedprintable"
@@ -41,7 +42,7 @@ type subscriptions struct {
 	clk  clock.Clock
 	cfg  Config
 
-	trips   atomic.Int64 // circuit-breaker trips
+	trips   metric.Int64Counter // circuit-breaker trips
 	tripped atomic.Bool
 }
 

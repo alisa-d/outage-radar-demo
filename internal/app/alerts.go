@@ -258,14 +258,26 @@ func (s *subscriptions) sendAlert(ctx context.Context, payload []byte) error {
 	var lang, match, severity, noticeText, utility, street string
 	var start, end time.Time
 	var waEnc, chEnc []byte
-	err := s.pool.QueryRow(ctx, `SELECT sub.language, a.match_result, a.severity, a.start_at, a.end_at, n.text, pr.utility, wa.data_enc, c.value_enc
+	var noticeID int64
+	var ordinal int
+	err := s.pool.QueryRow(ctx, `SELECT a.notice_id, a.ordinal, sub.language, a.match_result, a.severity, a.start_at, a.end_at, n.text, pr.utility, wa.data_enc, c.value_enc
 		FROM alerts a JOIN subscribers sub ON sub.id = a.subscriber_id JOIN notices n ON n.id = a.notice_id JOIN providers pr ON pr.id = n.provider_id
 		JOIN watched_addresses wa ON wa.id = a.watched_address_id
 		JOIN contact_channels c ON c.id = $2 AND c.subscriber_id = a.subscriber_id AND c.verified_at IS NOT NULL AND c.disabled_at IS NULL
-		WHERE a.id = $1`, p.Alert, p.Channel).Scan(&lang, &match, &severity, &start, &end, &noticeText, &utility, &waEnc, &chEnc)
+		WHERE a.id = $1`, p.Alert, p.Channel).Scan(&noticeID, &ordinal, &lang, &match, &severity, &start, &end, &noticeText, &utility, &waEnc, &chEnc)
 	if err == pgx.ErrNoRows {
 		return nil // erased, unsubscribed or never verified: nothing to send
 	} else if err != nil {
+		return err
+	}
+	// An Alert held for Quiet Hours must not go out for an Outage that has since ended or been cancelled.
+	var live bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM (SELECT end_at FROM outages WHERE notice_id = $1 ORDER BY id OFFSET $2 LIMIT 1) o WHERE o.end_at > $3)`,
+		noticeID, ordinal, s.clk.Now()).Scan(&live); err != nil {
+		return err
+	}
+	if !live {
+		_, err := s.pool.Exec(ctx, `INSERT INTO delivery_attempts (alert_id, channel_id, at, outcome) VALUES ($1, $2, $3, 'skipped')`, p.Alert, p.Channel, s.clk.Now())
 		return err
 	}
 	wplain, err := unseal(s.kp, waEnc)

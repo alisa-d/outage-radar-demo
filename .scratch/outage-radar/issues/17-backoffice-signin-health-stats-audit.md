@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 (Provider Health, status strip, Coverage)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -13,3 +13,18 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] The Provider Health page reflects the states from ticket 06
 - [ ] No backoffice endpoint returns decrypted personal data (test asserts on response bodies)
 - [ ] Backoffice actions are written to the audit log
+
+## Answer
+
+- Backoffice JSON API behind Keycloak OIDC Bearer ID tokens (JWKS verified, amr checked), with a realm export and compose service.
+- Provider health, stats and an audit log are served from migration `009_backoffice.sql`; tests use a fake OIDC issuer in `internal/testkit/oidc.go`.
+- Merged into `feat/outage-radar` as 560b345 (`git merge --no-ff`).
+
+Known gaps:
+- Keycloak realm never started; issuer URL may not match via localhost:8082.
+- Realm uses a hardcoded amr mapper.
+- No backoffice frontend or auth-code flow, only a Bearer ID token JSON API.
+- Minimal `alerts` table that ticket 14 must adopt or replace.
+- Only the latest error is shown, not history.
+- JWKS is refetched on every unknown kid without rate limit.
+- Story 60 Stale/Suspicious alert left to ticket 21.

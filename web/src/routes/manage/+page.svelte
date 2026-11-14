@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import AddressPicker from '$lib/AddressPicker.svelte';
   const t = {
     bg: { title: 'Управление на абонамента', email: 'Имейл', send: 'Изпрати връзка', sent: 'Ако имейлът е абониран, връзката е на път.', bad: 'Връзката е невалидна или изтекла.', lang: 'Език', addrs: 'Адреси', channels: 'Контакти', add: 'Добави', remove: 'Премахване', exp: 'Изтегли данните ми', del: 'Изтрий всичко', sure: 'Да изтрием всичко завинаги?', gone: 'Данните ви са изтрити.', unver: '(непотвърден)', lastWarn: 'Това е последният контакт: всичко ще бъде изтрито. Продължаване?', added: 'Ако имейлът е нов, пратихме писмо за потвърждение.' },
     en: { title: 'Manage your subscription', email: 'Email', send: 'Send link', sent: 'If the email is subscribed, a link is on its way.', bad: 'This link is invalid or expired.', lang: 'Language', addrs: 'Addresses', channels: 'Contacts', add: 'Add', remove: 'Remove', exp: 'Download my data', del: 'Delete everything', sure: 'Delete everything permanently?', gone: 'Your data has been deleted.', unver: '(unverified)', lastWarn: 'This is your last contact: everything will be deleted. Continue?', added: 'If the email is new, we sent a confirmation message.' }
@@ -11,6 +12,7 @@
   let msg = $state('');
   let email = $state('');
   let newEmail = $state('');
+  let settlements = $state([]);
 
   const api = (method, path, body) =>
     fetch('/api/manage' + path, { method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session }, body: body && JSON.stringify(body) });
@@ -26,6 +28,8 @@
     if (!res.ok) { msg = 'bad'; return; }
     session = (await res.json()).session;
     await reload();
+    const rs = await (await fetch('/api/regions')).json();
+    settlements = rs.flatMap((r) => r.settlements);
   });
   async function request() {
     await fetch('/api/manage/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
@@ -33,6 +37,11 @@
   }
   async function setLang(l) { await api('PUT', '/language', { language: l }); await reload(); }
   async function removeAddress(id) { await api('DELETE', '/addresses/' + id); await reload(); }
+  async function addAddress(a) {
+    if (!a.streetId || !a.number) return;
+    await api('POST', '/addresses', { street_id: a.streetId, number: a.number });
+    await reload();
+  }
   async function addChannel() { await api('POST', '/channels', { email: newEmail }); newEmail = ''; msg = 'added'; }
   async function removeChannel(id) {
     if (v.channels.filter((c) => c.verified).length <= 1 && !confirm(L.lastWarn)) return;
@@ -68,6 +77,7 @@
     <button disabled={v.language === 'en'} onclick={() => setLang('en')}>EN</button>
     <h2>{L.addrs}</h2>
     <ul>{#each v.addresses as a}<li>{a.street_id} {a.number} <button onclick={() => removeAddress(a.id)}>{L.remove}</button></li>{/each}</ul>
+    <AddressPicker {settlements} {lang} onconfirm={addAddress} />
     <h2>{L.channels}</h2>
     <ul>{#each v.channels as c}<li>{c.email} {c.verified ? '' : L.unver} <button onclick={() => removeChannel(c.id)}>{L.remove}</button></li>{/each}</ul>
     <input type="email" bind:value={newEmail} placeholder={L.email} />

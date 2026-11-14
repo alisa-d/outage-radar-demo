@@ -133,6 +133,7 @@
   :global(body) { margin: 0; font-family: system-ui, sans-serif; }
   main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
   nav { text-align: right; }
+  main :global(p) { overflow-wrap: anywhere; }
   nav button.on { font-weight: bold; }
   .outages { list-style: none; padding: 0; }
   .outages li { border-left: 4px solid #999; padding: 0.3rem 0.6rem; margin-bottom: 0.5rem; }

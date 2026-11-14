@@ -4,12 +4,26 @@
 
 **Blocked by:** None (tickets 14 and 17 are merged)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md` (stories 52 and 53). Vocabulary: `GLOSSARY.md`. Relates to: `19-shadow-mode.md` (remaining there: backoffice endpoints and the Operator-facing list).
 
-- [ ] Through Seam 1, a Provider in Shadow Mode creates Alert records (shadow flag) but sends no email
-- [ ] `shadow-alerts` lists those would-be Alerts without personal data
-- [ ] `provider-mode <provider> live` makes new Outages alert normally, and no Shadow Mode backlog is sent
-- [ ] Both demo Providers are seeded in Shadow Mode
-- [ ] Each switch writes an audit row, and the command works against the running compose Postgres (documented in the README in two lines)
+- [x] Through Seam 1, a Provider in Shadow Mode creates Alert records (shadow flag) but sends no email
+- [x] `shadow-alerts` lists those would-be Alerts without personal data
+- [x] `provider-mode <provider> live` makes new Outages alert normally, and no Shadow Mode backlog is sent
+- [x] Both demo Providers are seeded in Shadow Mode
+- [x] Each switch writes an audit row, and the command works against the running compose Postgres (documented in the README in two lines)
+
+## Answer
+
+Provider Shadow Mode is a flag: shadow Alerts store a row but enqueue no send job, so going live sends no backlog.
+`provider-mode <provider> shadow|live` flips it and writes an audit row; `shadow-alerts [provider]` lists would-be Alerts without personal data. Both demo Providers are seeded shadow (migration 013).
+Quiet Hours scheduling (ticket 15) still applies to live Alerts. Verified by TestShadowModeRecordsAlertsWithoutSendingAndGoingLiveSendsNoBacklog and TestBothDemoProvidersAreSeededInShadowMode.
+
+Merge commit: 1e05d05 on feat/outage-radar (migration renumbered 012 to 013).
+
+Known gaps:
+- After going live, an unchanged Outage that already has a shadow Alert does not alert, because dedup and material-change comparison see the shadow row; only new or materially changed Outages alert.
+- Ticket 19 still owns the backoffice endpoints and Operator list.
+- CLI actor is `cli` + OS user.
+- CLI against compose (project t24, torn down): `docker compose run --rm app provider-mode "ЕРП Север" live` worked and set shadow=false; bogus mode errors; `shadow-alerts` printed nothing on an empty DB. The README had a wrong command (extra `outage-radar`, since the image entrypoint is already the binary); fixed.

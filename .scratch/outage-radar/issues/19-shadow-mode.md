@@ -13,3 +13,7 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] After switching live, new Outages alert normally and no Shadow Mode backlog is sent
 - [ ] Both demo Providers are seeded in Shadow Mode
 - [ ] The switch is audited
+
+## Comments
+
+Ticket 24 delivered the Shadow Mode core (flag, no send jobs, no backlog on live, audit) and the CLI switch plus shadow-alerts list; remaining for 19: backoffice endpoints and the Operator list of would-be Alerts.

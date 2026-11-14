@@ -91,7 +91,8 @@ func Start(t testing.TB, role string, handlers map[string]app.Handler) *System {
 	}
 	t.Cleanup(s.Providers.Close)
 	t.Cleanup(s.Claude.Close)
-	a, err := app.Start(ctx, app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0"}, s.Clock, handlers)
+	a, err := app.Start(ctx, app.Config{Role: role, DatabaseURL: dsn, HTTPAddr: "127.0.0.1:0",
+		DataKey: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", SMTPAddr: s.SMTP.Addr, MailFrom: "alerts@test.invalid", PublicURL: "http://app.test"}, s.Clock, handlers)
 	if err != nil {
 		t.Fatalf("start app: %v", err)
 	}

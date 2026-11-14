@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -11,8 +10,6 @@ import (
 	"fmt"
 	"go.opentelemetry.io/otel/metric"
 	"log/slog"
-	"mime"
-	"mime/quotedprintable"
 	"net/http"
 	"net/mail"
 	"net/smtp"
@@ -261,18 +258,14 @@ func (s *subscriptions) sendVerifyEmail(ctx context.Context, sealed []byte) erro
 		return nil
 	}
 	tpl := verifyMail[p.Language]
-	var body bytes.Buffer
-	qp := quotedprintable.NewWriter(&body)
-	base := strings.TrimRight(s.cfg.PublicURL, "/")
+	var body string
 	if p.Kind == "manage" {
 		tpl = manageMail[p.Language]
-		fmt.Fprintf(qp, tpl.body, base+"/manage?token="+p.Token)
+		body = fmt.Sprintf(tpl.body, s.baseURL()+"/manage?token="+p.Token)
 	} else {
-		fmt.Fprintf(qp, tpl.body, privacyNoticeVersion, base+"/verify?token="+p.Token)
+		body = fmt.Sprintf(tpl.body, privacyNoticeVersion, s.baseURL()+"/verify?token="+p.Token)
 	}
-	qp.Close()
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
-		s.cfg.MailFrom, p.To, mime.QEncoding.Encode("utf-8", tpl.subject), s.clk.Now().Format(time.RFC1123Z), body.String())
+	msg := s.composeMail(p.To, tpl.subject, nil, body)
 	if err := s.sendMail(p.To, msg); err != nil {
 		slog.Warn("verification email failed; will retry")
 		return err

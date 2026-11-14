@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"mime"
-	"mime/quotedprintable"
 	"net/http"
 	"strconv"
 	"strings"
@@ -303,14 +300,10 @@ func (s *subscriptions) sendAlert(ctx context.Context, payload []byte) error {
 	head := fmt.Sprintf(t.headline[severity+"/"+match], t.utility[utility])
 	loc := sofia
 	window := start.In(loc).Format("2006-01-02 15:04") + " - " + end.In(loc).Format("2006-01-02 15:04")
-	unsubAPI := strings.TrimRight(s.cfg.PublicURL, "/") + "/api/unsubscribe?token=" + s.unsubToken(p.Channel)
-	unsubPage := strings.TrimRight(s.cfg.PublicURL, "/") + "/unsubscribe?token=" + s.unsubToken(p.Channel)
-	var body bytes.Buffer
-	qp := quotedprintable.NewWriter(&body)
-	fmt.Fprintf(qp, "%s\r\n\r\n%s: %s\r\n%s: %s\r\n\r\n%s:\r\n%s\r\n\r\n-- \r\n%s: %s\r\n", head, t.addressWord, addr, t.windowWord, window, t.noticeWord, plainNotice(noticeText), t.unsub, unsubPage)
-	qp.Close()
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nList-Unsubscribe: <%s>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s",
-		s.cfg.MailFrom, to, mime.QEncoding.Encode("utf-8", head), s.clk.Now().Format(time.RFC1123Z), unsubAPI, body.String())
+	unsubAPI := s.baseURL() + "/api/unsubscribe?token=" + s.unsubToken(p.Channel)
+	unsubPage := s.baseURL() + "/unsubscribe?token=" + s.unsubToken(p.Channel)
+	body := fmt.Sprintf("%s\r\n\r\n%s: %s\r\n%s: %s\r\n\r\n%s:\r\n%s\r\n\r\n-- \r\n%s: %s\r\n", head, t.addressWord, addr, t.windowWord, window, t.noticeWord, plainNotice(noticeText), t.unsub, unsubPage)
+	msg := s.composeMail(string(to), head, []string{"List-Unsubscribe: <" + unsubAPI + ">", "List-Unsubscribe-Post: List-Unsubscribe=One-Click"}, body)
 
 	sendErr := s.sendMail(string(to), msg)
 	outcome := "sent"

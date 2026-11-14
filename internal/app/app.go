@@ -20,6 +20,10 @@ import (
 	"github.com/alisa/outage-radar/internal/ingest/erpsever"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 //go:embed migrations/*.sql
@@ -149,6 +153,17 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 		handlers = map[string]Handler{}
 	}
 	handlers[verifyEmailJob] = func(ctx context.Context, p []byte) error { return subs.sendVerifyEmail(ctx, p) }
+	reg := prometheus.NewRegistry()
+	exp, err := otelprom.New(otelprom.WithRegisterer(reg))
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	metrics, err := ingest.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp)).Meter("outage-radar"), pool, clk)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
 	a := &App{pool: pool}
 	if serveAPI {
 		l, err := net.Listen("tcp", cfg.HTTPAddr)
@@ -157,7 +172,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			return nil, err
 		}
 		a.addr = l.Addr().String()
-		srv := &http.Server{Handler: newMux(pool, subs, clk)}
+		srv := &http.Server{Handler: newMux(pool, subs, clk, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))}
 		a.wg.Add(2)
 		go func() {
 			defer a.wg.Done()
@@ -178,7 +193,7 @@ func Start(ctx context.Context, cfg Config, clk clock.Clock, handlers map[string
 			// Registering a Provider is adding its adapter here.
 			adapters := []ingest.Adapter{erpsever.New(cfg.ErpSeverURL)}
 			a.wg.Add(1)
-			go func() { defer a.wg.Done(); ingest.Run(ctx, pool, clk, adapters) }()
+			go func() { defer a.wg.Done(); ingest.Run(ctx, pool, clk, metrics, adapters) }()
 		}
 	}
 	return a, nil

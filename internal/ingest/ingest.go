@@ -53,17 +53,17 @@ func (uaTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-// shortcut: no response caching or failure backoff, a failed poll retries after the normal interval; add both with Provider Health.
+// shortcut: no response caching or failure backoff, a failed poll retries after the normal interval; add both if a Provider rate-limits us.
 var client = &http.Client{Timeout: 30 * time.Second, Transport: uaTransport{}}
 
 // Run polls every adapter on its interval (by the injected clock) until ctx ends.
-func Run(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock, adapters []Adapter) {
+func Run(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock, m *Metrics, adapters []Adapter) {
 	next := make([]time.Time, len(adapters))
 	for {
 		for i, a := range adapters {
 			if now := clk.Now(); !now.Before(next[i]) {
 				next[i] = now.Add(a.Interval())
-				if err := Poll(ctx, pool, a); err != nil {
+				if err := Poll(ctx, pool, clk, m, a); err != nil {
 					fmt.Fprintf(os.Stderr, "ingest %s: %v\n", a.Name(), err)
 				}
 			}
@@ -76,16 +76,22 @@ func Run(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock, adapters []Ad
 	}
 }
 
-// Poll fetches once and stores new or changed Notices with their Outages.
-func Poll(ctx context.Context, pool *pgxpool.Pool, a Adapter) error {
+// Poll fetches once, stores new or changed Notices with their Outages and records Provider Health.
+func Poll(ctx context.Context, pool *pgxpool.Pool, clk clock.Clock, m *Metrics, a Adapter) error {
 	var providerID int
 	if err := pool.QueryRow(ctx, `SELECT id FROM providers WHERE name = $1`, a.Name()).Scan(&providerID); err != nil {
 		return fmt.Errorf("provider: %w", err)
 	}
+	began := time.Now()
 	notices, err := a.Fetch(ctx, client)
+	m.fetched(ctx, a.Name(), time.Since(began), err)
 	if err != nil {
+		if rerr := record(ctx, pool, providerID, clk.Now(), a, err, 0, 0); rerr != nil {
+			return rerr
+		}
 		return err
 	}
+	failed, unresolved := 0, 0
 	for _, n := range notices {
 		h := sha256.Sum256(append([]byte(n.Text), n.Fields...))
 		hash := hex.EncodeToString(h[:])
@@ -94,14 +100,24 @@ func Poll(ctx context.Context, pool *pgxpool.Pool, a Adapter) error {
 		}
 		outages, err := a.Extract(n)
 		if err != nil {
+			failed++
 			fmt.Fprintf(os.Stderr, "ingest %s notice %s: %v\n", a.Name(), n.ExternalID, err)
 			continue
+		}
+		for _, o := range outages {
+			var ok bool
+			pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM settlements s JOIN providers p ON p.region_id = s.region_id WHERE p.id = $1 AND s.name = $2)`,
+				providerID, o.Settlement).Scan(&ok)
+			if !ok {
+				unresolved++
+			}
 		}
 		if err := store(ctx, pool, providerID, n, hash, outages); err != nil {
 			return err
 		}
 	}
-	return nil
+	m.parsed(ctx, a.Name(), len(notices), failed, unresolved)
+	return record(ctx, pool, providerID, clk.Now(), a, nil, len(notices), failed)
 }
 
 func known(ctx context.Context, pool *pgxpool.Pool, providerID int, externalID, hash string) bool {

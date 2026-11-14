@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 
@@ -15,3 +15,11 @@ Spec: `.scratch/outage-radar/spec.md`. Vocabulary: `GLOSSARY.md`.
 - [ ] The web page shows the Region picker in Bulgarian and English and works at phone width
 - [ ] A Seam 1 test starts the system against real Postgres with the stub servers and clock, and asserts on the Regions API
 - [ ] `docker compose up` runs everything locally
+
+## Answer
+
+- Single Go binary with env-selected role (api/ingest/notify/all), Postgres migrations, Postgres-backed job queue and injectable clock.
+- Public API lists Regions (Varna seeded); static SvelteKit bg/en page shows the Region picker; docker compose runs app, Postgres, frontend, Mailpit.
+- Seam 1 test harness (testcontainers Postgres, stub provider/Claude servers, SMTP sink, controllable clock) is in place.
+
+Merged in fe57556.

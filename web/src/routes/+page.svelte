@@ -4,8 +4,8 @@
   let confirmed = $state(null);
 
   const t = {
-    bg: { title: 'Аварии във вашия район', pick: 'Изберете област', loading: 'Зареждане…', error: 'Грешка при зареждане', settlements: 'Населени места', providers: 'Доставчици', water: 'вода', power: 'ток', cut: 'Прекъсване', disturbance: 'Възможни смущения', planned: 'планирано', emergency: 'аварийно', approx: '~', original: 'Оригинално съобщение', none: 'Няма планирани прекъсвания за следващите 7 дни.', whole: 'цялото населено място', since: 'от', healthy: 'данните са актуални', stale: 'данните от {p} не са налични', suspicious: 'данните от {p} може да са непълни', unknown: 'все още няма данни от {p}', cov: { 'planned outages only': 'само планирани прекъсвания', 'planned and emergency outages': 'планирани и аварийни прекъсвания' } },
-    en: { title: 'Outages in your area', pick: 'Choose a region', loading: 'Loading…', error: 'Could not load regions', settlements: 'Settlements', providers: 'Providers', water: 'water', power: 'power', cut: 'Cut', disturbance: 'Possible disturbances', planned: 'planned', emergency: 'emergency', approx: '~', original: 'Original notice (Bulgarian)', none: 'No planned outages in the next 7 days.', whole: 'whole settlement', since: 'since', healthy: 'data is up to date', stale: 'data from {p} unavailable', suspicious: 'data from {p} may be incomplete', unknown: 'no data from {p} yet', cov: { 'planned outages only': 'planned outages only', 'planned and emergency outages': 'planned and emergency outages' } }
+    bg: { title: 'Аварии във вашия район', pick: 'Изберете област', loading: 'Зареждане…', error: 'Грешка при зареждане', settlements: 'Населени места', providers: 'Доставчици', water: 'вода', power: 'ток', cut: 'Прекъсване', disturbance: 'Възможни смущения', planned: 'планирано', emergency: 'аварийно', approx: '~', original: 'Оригинално съобщение', none: 'Няма планирани прекъсвания за следващите 7 дни.', whole: 'цялото населено място', since: 'от', healthy: 'данните са актуални', stale: 'данните от {p} не са налични', suspicious: 'данните от {p} може да са непълни', unknown: 'все още няма данни от {p}', cov: { 'planned outages only': 'само планирани прекъсвания', 'planned and emergency outages': 'планирани и аварийни прекъсвания' }, checkTitle: 'Резултат за адреса', affected: 'Засегнат', possibly_affected: 'Възможно засегнат', not_affected: 'Не е засегнат', no_data: 'Няма данни', noDataWhy: 'Данните от {p} не са актуални, затова не можем да кажем дали има авария.', notAffectedNote: 'Обхват: {c}. Липсата на съобщение извън обхвата не означава, че няма авария.', alerts: 'Получавайте известия' },
+    en: { title: 'Outages in your area', pick: 'Choose a region', loading: 'Loading…', error: 'Could not load regions', settlements: 'Settlements', providers: 'Providers', water: 'water', power: 'power', cut: 'Cut', disturbance: 'Possible disturbances', planned: 'planned', emergency: 'emergency', approx: '~', original: 'Original notice (Bulgarian)', none: 'No planned outages in the next 7 days.', whole: 'whole settlement', since: 'since', healthy: 'data is up to date', stale: 'data from {p} unavailable', suspicious: 'data from {p} may be incomplete', unknown: 'no data from {p} yet', cov: { 'planned outages only': 'planned outages only', 'planned and emergency outages': 'planned and emergency outages' }, checkTitle: 'Result for this address', affected: 'Affected', possibly_affected: 'Possibly affected', not_affected: 'Not affected', no_data: 'No data', noDataWhy: 'Data from {p} is not current, so we cannot say whether there is an outage.', notAffectedNote: 'Coverage: {c}. No notice outside this coverage does not mean there is no outage.', alerts: 'Get alerts' }
   };
   let lang = $state('bg');
   let regions = $state(null);
@@ -14,6 +14,18 @@
   const L = $derived(t[lang]);
   const region = $derived(regions?.find((r) => String(r.id) === selected));
   let days = $state(null);
+  let checkResult = $state(null);
+
+  $effect(() => {
+    const c = confirmed;
+    const l = lang;
+    checkResult = null;
+    if (!c?.streetId || !c.number) return;
+    fetch(`/api/check?street=${c.streetId}&number=${encodeURIComponent(c.number)}&lang=${l}`)
+      .then((res) => res.json())
+      .then((body) => (checkResult = body))
+      .catch(() => (failed = true));
+  });
 
   $effect(() => {
     const id = selected;
@@ -68,6 +80,25 @@
       <ul>{#each region.settlements as s}<li>{s.name}</li>{/each}</ul>
       <AddressPicker settlements={region.settlements} {lang} onconfirm={(a) => (confirmed = a)} />
       {#if confirmed}<p data-testid="confirmed">{JSON.stringify(confirmed)}</p>{/if}
+      {#if checkResult}
+        <section data-testid="check">
+          <h2>{L.checkTitle}</h2>
+          {#each checkResult.utilities as u}
+            <div class={`result ${u.result}`}>
+              <strong>{L[u.utility]}: {L[u.result]}</strong> ({u.provider})
+              {#if u.result === 'no_data'}<p>{L.noDataWhy.replace('{p}', u.provider)}</p>{/if}
+              {#if u.result === 'not_affected'}<p>{L.notAffectedNote.replace('{c}', L.cov[u.coverage] ?? u.coverage)}</p>{/if}
+              {#each u.outages as o}
+                <div>
+                  <strong>{o.start.slice(0, 10)} {when(o)}</strong>, {L[o.severity]}, {L[o.kind]}: {o.places.join('; ')}
+                  <details><summary>{L.original}</summary><pre lang="bg">{o.notice}</pre></details>
+                </div>
+              {/each}
+            </div>
+          {/each}
+          <a href={`/subscribe?street_id=${confirmed.streetId}&number=${encodeURIComponent(confirmed.number)}`}>{L.alerts}</a>
+        </section>
+      {/if}
       <h2>{L.providers}</h2>
       <ul>{#each region.providers as p}<li>{p.name} ({L[p.utility]})</li>{/each}</ul>
       <div class="strip" data-testid="status-strip">
@@ -107,6 +138,10 @@
   .outages li.disturbance { border-color: #e90; }
   .strip p { margin: 0.2rem 0; padding: 0.3rem 0.6rem; background: #eee; }
   .strip p.stale, .strip p.suspicious { background: #fd8; }
+  .result { padding: 0.3rem 0.6rem; margin-bottom: 0.5rem; background: #eee; }
+  .result.affected { background: #fbb; }
+  .result.possibly_affected { background: #fd8; }
+  .result.no_data { background: #ddd; }
   pre { white-space: pre-wrap; font-family: inherit; }
   select { display: block; width: 100%; margin-top: 0.5rem; padding: 0.6rem; font-size: 1rem; }
 </style>

@@ -8,8 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alisa/outage-radar/internal/clock"
@@ -33,6 +36,23 @@ type Outage struct {
 	Kind           string // planned | emergency
 	Settlement     string
 	Places         []string
+}
+
+// Extractor turns a Notice into Outages. Parsers and the LLM both satisfy it.
+type Extractor interface {
+	Extract(n Notice) ([]Outage, error)
+}
+
+var extractionFailures sync.Map // adapter name -> *atomic.Int64
+
+// WriteMetrics writes the ingest metrics in Prometheus text format.
+// shortcut: in-process counters, per process and reset on restart; move to OpenTelemetry with the observability ticket.
+func WriteMetrics(w io.Writer) {
+	fmt.Fprintln(w, "# TYPE outage_radar_extraction_failures_total counter")
+	extractionFailures.Range(func(k, v any) bool {
+		fmt.Fprintf(w, "outage_radar_extraction_failures_total{adapter=%q} %d\n", k, v.(*atomic.Int64).Load())
+		return true
+	})
 }
 
 // Adapter is everything a Provider needs to plug in.
@@ -94,6 +114,9 @@ func Poll(ctx context.Context, pool *pgxpool.Pool, a Adapter) error {
 		}
 		outages, err := a.Extract(n)
 		if err != nil {
+			// Not stored, so the Notice is retried on the next poll.
+			c, _ := extractionFailures.LoadOrStore(a.Name(), new(atomic.Int64))
+			c.(*atomic.Int64).Add(1)
 			fmt.Fprintf(os.Stderr, "ingest %s notice %s: %v\n", a.Name(), n.ExternalID, err)
 			continue
 		}

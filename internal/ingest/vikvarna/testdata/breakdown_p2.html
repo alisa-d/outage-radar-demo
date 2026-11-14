@@ -1,0 +1,268 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="bg">
+<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title>Съобщения за аварии&nbsp;|&nbsp;Водоснабдяване и канализация ООД - Варна </title>
+	<base href="https://vikvarna.com/" />
+	<meta name="keywords" content="Водоснабдяване и канализация - Варна, ВиК Варна" />
+	<meta name="description" content="Официален интернет сайт на Водоснабдяване и канализация ООД - Варна "/>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet" />
+	
+	<script src="js/jquery.js"></script>
+	<script src="js/jquery-ui-1.8.17.custom.min.js"></script>
+	<script src="js/base_functions.js"></script>
+	<script src="js/jquery.mask.js"></script>		
+	<script>
+		var _recaptcha = null;
+		var BASE_URL = "https://vikvarna.com/";
+		var LANG = "bg";		
+	</script>	
+	<link rel="stylesheet" type="text/css" href="https://vikvarna.com/css/layout.css?ver=4" />
+	<link rel="stylesheet" type="text/css" href="https://vikvarna.com/css/content.css?ver=4" />	
+	<link rel="stylesheet" type="text/css" href="https://vikvarna.com/css/menu.css?ver=4" />
+			
+		<script>
+		function updateFilters() {
+			$.post("https://vikvarna.com/index.php?item=messages&mode=filters", $('#filtersForm').serialize(), function(resp) {
+				$('#filters').html(resp.filters);
+				$('#main_content').html(resp.content);
+			});
+		}
+	</script>
+</head>
+<body>
+	<div class="outer">
+			<header>
+		<a href="https://vikvarna.com/" class="logo" title="Начало"></a>
+		<div class="header-caption"><h1>"Водоснабдяване и канализация - Варна" ООД</h1></div>
+		<div class="header">
+			<div class="phone">НАЦИОНАЛЕН ТЕЛЕФОН<span>070011300</span></div>
+			<div class="phone emergency">ТЕЛЕФОН ЗА АВАРИИ<span>080019160</span></div>
+            <ul class="top-menu">
+												<li><a href="https://vikvarna.com/bg/about-company.html">За Компанията</a></li>
+																																																																				<li><a href="https://vikvarna.com/bg/projects.html">Проекти</a></li>
+																				<li><a href="https://vikvarna.com/bg/opinions-and-recommends.html">Жалби, молби, сигнали</a></li>
+																								<li><a href="https://vikvarna.com/bg/curious.html">Любопитно</a></li>
+																<li><a href="https://vikvarna.com/bg/useful-links.html">Полезни връзки</a></li>
+																<li><a href="https://vikvarna.com/bg/payments.html">Начини и места за плащане</a></li>
+																<li><a href="https://vikvarna.com/bg/clients.html">Клиенти</a></li>
+																<li><a href="https://vikvarna.com/bg/careers.html">Кариери</a></li>
+												<li id="last-top-menu"><a href="https://vikvarna.com/bg/sitemap.html">Карта на сайта</a></li>
+			</ul>
+			<ul class="header-menu">
+				<li><a href="https://vikvarna.com/">Начало</a></li>
+												<li><a href="https://vikvarna.com/bg/services.html">Услуги</a></li>
+																<li><a href="https://vikvarna.com/bg/regulatory-base.html">Нормативна база</a></li>
+																				<li><a href="https://vikvarna.com/bg/news.html">Новини</a></li>
+				<li><a href="https://vikvarna.com/bg/about-company/DeklaraciaDostypnost.html">Декларация за достъпност</a></li>
+																												<li><a href="https://vikvarna.com/bg/contacts.html">Контакти</a></li>
+											</ul>
+		</div>
+	</header>
+	<div style="text-align:center;background: #fff;"><a href="http://vikvarna.com/bg/projects.html" title="проекти" ><img src="img/Europroject.png" alt="Европроект"/></a></div>
+		<div class="content">
+			<ul class="path">
+				<li><a href="https://vikvarna.com/">Начало</a></li>
+								<li><a href="https://vikvarna.com/bg/messages.html?type=breakdown&region_id=15">ЕТР Варна</a></li>				
+																<li>Съобщения за аварии</li>
+							</ul>
+			<div >
+					<a target="_blank" href="https://experience.arcgis.com/experience/54f02e81882f40a5bcd69d75a871dc03/page/%D0%9F%D1%83%D0%B1%D0%BB%D0%B8%D1%87%D0%B5%D0%BD-%D0%BF%D1%80%D0%B5%D0%B3%D0%BB%D0%B5%D0%B4?views=%D0%A0%D0%B5%D0%BC%D0%BE%D0%BD%D1%82%D0%B8">Карта на ремонтите и нарушеното водоснабдяване</a>
+					<br/><br/>
+			</div>
+			<div class="content-left" >
+                <div class="filters" id="filters">
+                						<form action="#" id="filtersForm">					
+					<input type="hidden" name="type" value="breakdown" />
+					<select name="region_id" onchange="updateFilters()">
+                    	<option value="">Моля изберете</option>
+                    	                        <option value="15"  selected="selected" >ЕТР Варна</option>
+                                                <option value="2" >ЕТР Девня</option>
+                                                <option value="6" >ЕТР Провадия</option>
+                                                <option value="11" >ЕТР Долни Чифлик</option>
+                                            </select>
+                                        <select name="sub_region_id" onchange="updateFilters()">
+                    	<option value="">Моля изберете</option>
+                                                <option value="16" >Център</option>
+                                                <option value="17" >Изток</option>
+                                                <option value="18" >Запад</option>
+                                                <option value="19" >Владиславово</option>
+                                                <option value="20" >Аспарухово</option>
+                                                <option value="21" >Аксаково</option>
+                                                <option value="22" >Изгрев</option>
+                                                
+                    </select>
+                                        <div class="menu">
+                    <ul>
+                        <li  class="active" ><a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown"><span>›</span> Съобщения за аварии</a></li>
+                        <li ><a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=repair"><span>›</span> Планови ремонти</a></li>
+                                            </ul>
+                	</div>
+                    </form>                    
+                </div>                
+								<div class="banners-left">
+					<a href="https://vikvarna.com/bg/check-and-payment.html" title="Провери своята сметка"><img src="img/banner_check.png" alt="Провери своята сметка" /></a>
+					<a href="https://vikvarna.com/bg/check-and-payment.html" title="Начини и места за плащане"><img src="img/banner_payment.png" alt="Начини и места за плащане" /></a>
+					
+					<a href="https://vikvarna.com/bg/messages/breakdown.html" title="Известия за спиране на вода"><img src="img/sidebar.png" alt="Известия за спиране на вода" /></a>
+					<a href="http://vikvarna.com/bg/self-report.html" title="Самоотчет"><img src="img/samootchet_vik.png" alt="Самоотчет" /></a>
+					<a href="https://kampania.vikvarna.com/" title="Водата е дар - кампания" target="_blank"><img src="img/vodata_e_dar.png" alt="Водата е дар!" /></a>
+				</div>
+			</div>
+			<div class="content-right" id="main_content">
+																			<h1>Съобщения за аварии</h1>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17820.html?region_id=15&sub_region_id=0">Без вода остават:</a></h2>
+														<div class="list-item-date">11.11.2026 г.</div>
+							<div class="list-item-text">
+								 От 11ч. до около 17ч. ниска зона на кв. Виница и местност Малко Ю. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17820.html?region_id=15&sub_region_id=22"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17819.html?region_id=15&sub_region_id=0">Без вода остават :</a></h2>
+														<div class="list-item-date">11.11.2026 г.</div>
+							<div class="list-item-text">
+								 От 10.30ч. до около 16ч. части от к.к. Чайка и местност Ален Мак. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17819.html?region_id=15&sub_region_id=22"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17818.html?region_id=15&sub_region_id=0">Без вода остават :</a></h2>
+														<div class="list-item-date">11.11.2026 г.</div>
+							<div class="list-item-text">
+								 От 9.30ч. до около 15ч. района около Топливо в ЗПЗ. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17818.html?region_id=15&sub_region_id=18"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17817.html?region_id=15&sub_region_id=0">Без вода остават : </a></h2>
+														<div class="list-item-date">10.11.2026 г.</div>
+							<div class="list-item-text">
+								 От 16 часа до около 17 часа абонатите между бул.,,Васил Левски", ул.,,Беласица", ул.,,Тодор Влайков" и бул.,,Сливница". ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17817.html?region_id=15&sub_region_id=16"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17815.html?region_id=15&sub_region_id=0">Без вода остават : </a></h2>
+														<div class="list-item-date">10.11.2026 г.</div>
+							<div class="list-item-text">
+								 От 9,30 часа до около 12 часа абонатите между ул.,,Д-р Пискюлиев", ул.,,Кракра", ул.,,Г.Бенковски" и бул.,,Христо Ботев". ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17815.html?region_id=15&sub_region_id=16"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17813.html?region_id=15&sub_region_id=0">Без вода</a></h2>
+														<div class="list-item-date">09.11.2026 г.</div>
+							<div class="list-item-text">
+								 Поради предизвикана авария от външна фирма без вода от 14.30 до около 17.00 ч. абонатите на част от кк. Чайка. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17813.html?region_id=15&sub_region_id=22"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17812.html?region_id=15&sub_region_id=0">Без вода</a></h2>
+														<div class="list-item-date">09.11.2026 г.</div>
+							<div class="list-item-text">
+								 Без вода от 11.00 до около 13.00 ч. абонатите на част от кв. Галата. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17812.html?region_id=15&sub_region_id=20"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17810.html?region_id=15&sub_region_id=0">Без вода</a></h2>
+														<div class="list-item-date">09.11.2026 г.</div>
+							<div class="list-item-text">
+								 Без вода от 10.00 до около 16.00 ч. магазини 'Декатлон' , 'Айко' и 'Ралица'. ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17810.html?region_id=15&sub_region_id=18"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17806.html?region_id=15&sub_region_id=0">Без вода ще бъдат:</a></h2>
+														<div class="list-item-date">08.11.2026 г.</div>
+							<div class="list-item-text">
+								 оТ 12ч.до около17ч. абонатите от ЖК "Победа" ,бул"Хр.Смирненски" ,бул"Сливница" ,бул"Акад.Сахаров" и бул "Цар Освободител" ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17806.html?region_id=15&sub_region_id=18"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="list-item">
+							<h2><a href="https://vikvarna.com/bg/messages/breakdown/17805.html?region_id=15&sub_region_id=0">Без вода ще бъдат:</a></h2>
+														<div class="list-item-date">08.11.2026 г.</div>
+							<div class="list-item-text">
+								 от 11ч до около 15ч абонатите от с.Слънчево ...
+								<a href="https://vikvarna.com/bg/messages/breakdown/17805.html?region_id=15&sub_region_id=21"><strong>прочети още</strong></a>
+							</div>
+							<div class="clear"></div> 
+						</div>
+												<div class="clear"></div>
+										<div class="paging">
+										
+					<div class="pages">
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=1" >1</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=2"  id="active-page" >2</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=3" >3</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=4" >4</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=5" >5</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=6" >6</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=7" >7</a>
+													<a href="https://vikvarna.com/bg/messages.html?region_id=15&sub_region_id=0&type=breakdown&page=8" >8</a>
+											</div>
+					
+									
+				</div>
+																	
+			</div>
+			<div class="clear"></div>			
+		</div>
+	</div>
+		
+	<div class="bottom">
+		<div class="outer">
+			<div class="footer">
+				<ul>
+					<li><a href="https://vikvarna.com/">Начало</a></li>
+															<li><a href="https://vikvarna.com/bg/services.html">Услуги</a></li>
+																				<li><a href="https://vikvarna.com/bg/regulatory-base.html">Нормативна база</a></li>
+																									<li><a href="https://vikvarna.com/bg/news.html">Новини</a></li>
+																																			<li><a href="https://vikvarna.com/bg/contacts.html">Контакти</a></li>
+																									<li><a href="https://vikvarna.com/bg/about-company.html">За Компанията</a></li>
+																																																																																					<li><a href="https://vikvarna.com/bg/projects.html">Проекти</a></li>
+																									<li><a href="https://vikvarna.com/bg/opinions-and-recommends.html">Жалби, молби, сигнали</a></li>
+																				<li><a href="https://vikvarna.com/bg/self-report.html">Самоотчет</a></li>
+																				<li><a href="https://vikvarna.com/bg/curious.html">Любопитно</a></li>
+																				<li><a href="https://vikvarna.com/bg/useful-links.html">Полезни връзки</a></li>
+																				<li><a href="https://vikvarna.com/bg/payments.html">Начини и места за плащане</a></li>
+																				<li><a href="https://vikvarna.com/bg/clients.html">Клиенти</a></li>
+																				<li><a href="https://vikvarna.com/bg/careers.html">Кариери</a></li>
+															<li><a href="https://vikvarna.com/bg/sitemap.html">Карта на сайта</a></li>
+				</ul>
+				<a href="https://vikvarna.com/bg/index.html?forceMobileVersion=1" title="към мобилна версия"><img src="img/icon_mobile.png" alt="Мобилна версия" class="left mobile_icon"/></a>
+				<p> <a href="http://dotmedia.bg" target="_blank">поддръжка: Дот Медиа</a></p>
+				<div class="clear"></div>
+			</div>
+		</div>
+	</div>
+		<script>
+	var onloadCallback = function() {		
+		_recaptcha = grecaptcha;
+	}
+	</script>
+	<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback" async defer></script>
+		
+
+	
+	<script type="text/javascript" src="https://vikvarna.com/js/jquery.js"></script>
+	<script type="text/javascript" src="https://vikvarna.com/js/jquery-ui-1.8.17.custom.min.js"></script>
+	<script type="text/javascript" src="https://vikvarna.com/js/base_functions.js"></script>
+	<script type="text/javascript" src="https://vikvarna.com/js/custom-form-elements.js"></script>
+	<script type="text/javascript" src="https://vikvarna.com/js/jquery.mask.js"></script>	
+</body>
+</html>

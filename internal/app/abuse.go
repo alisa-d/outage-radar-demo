@@ -63,6 +63,30 @@ type limit struct {
 	window time.Duration
 }
 
+// enforce records a hit for every limit; it writes the 429 or 500 and returns false when one is exceeded.
+func (s *subscriptions) enforce(w http.ResponseWriter, r *http.Request, checks []limit) bool {
+	for _, c := range checks {
+		if ok, err := s.allow(r.Context(), c.key, c.max, c.window); err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return false
+		} else if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(c.window.Seconds())))
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return false
+		}
+	}
+	return true
+}
+
+// limitManageRequest applies the signup's per-IP and per-channel limits to management-link requests,
+// so the endpoint cannot be used to flood a mailbox. The answer does not depend on whether the email is known.
+func (s *subscriptions) limitManageRequest(w http.ResponseWriter, r *http.Request, email string) bool {
+	return s.enforce(w, r, []limit{
+		{"manage-ip:" + clientIP(r), s.cfg.IPLimit, hour},
+		{"manage-channel:" + string(blindIndex(s.kp, email)), s.cfg.ChannelLimit, hour},
+	})
+}
+
 // limitSignup runs the rate limits, the daily cap and the circuit breaker. It writes
 // the response and returns false when the signup must not go on.
 func (s *subscriptions) limitSignup(w http.ResponseWriter, r *http.Request, email string, addrs []string) bool {
@@ -75,15 +99,8 @@ func (s *subscriptions) limitSignup(w http.ResponseWriter, r *http.Request, emai
 	for _, a := range addrs {
 		checks = append(checks, limit{"address:" + a, s.cfg.AddressLimit, hour})
 	}
-	for _, c := range checks {
-		if ok, err := s.allow(r.Context(), c.key, c.max, c.window); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return false
-		} else if !ok {
-			w.Header().Set("Retry-After", strconv.Itoa(int(c.window.Seconds())))
-			http.Error(w, "too many requests", http.StatusTooManyRequests)
-			return false
-		}
+	if !s.enforce(w, r, checks) {
+		return false
 	}
 	// Circuit breaker: only new verifications pause; verified Subscribers are not touched here.
 	ok, err := s.allow(r.Context(), "budget:email", s.cfg.EmailDailyBudget, day)

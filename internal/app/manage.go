@@ -119,6 +119,9 @@ func (s *subscriptions) requestManageLink(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	if !s.limitManageRequest(w, r, email) {
+		return
+	}
 	err := func() error {
 		tx, err := s.pool.Begin(r.Context())
 		if err != nil {
